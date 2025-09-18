@@ -1,0 +1,9 @@
+.idea/
+# dependencies
+menu_zsh/
+turbo_zsh/
+user/
+visier_dev/
+# in case they are symlinks
+menu_zsh
+turbo_zsh

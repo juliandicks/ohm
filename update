@@ -1,0 +1,28 @@
+#!/bin/zsh
+
+MY_PATH=${0:A:h}
+
+# List of external repositories
+DEPS=(menu_zsh turbo_zsh user)
+
+info() {
+    printf "\e[93;44;1mΩ \033[97;22m%s\033[K\033[0m\n" "$1"
+}
+info "UPDATE"
+source ${MY_PATH}/banner.zsh
+
+info "Checking dependencies..."
+
+for folder in "${DEPS[@]}"; do
+  if [[ -d "$folder/.git" ]]; then
+    info "Updating $folder..."
+    git -C "$folder" pull --ff-only
+  else
+    info "INVALID $folder..."
+  fi
+done
+
+info "Updating core..."
+git pull
+
+info "Done."
