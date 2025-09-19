@@ -1,0 +1,147 @@
+#!/bin/zsh
+# shellcheck disable=SC2296,SC2154,SC1090
+
+source ${OHM_PATH}/turbo_zsh/system_lib.zsh
+uses alerts_lib.zsh
+uses string_lib.zsh
+uses crt_lib.zsh
+
+source ${OHM_USER_PATH}/env_${USER}_${HOST%%.*}
+
+typeset -p SERVICE_LIST &>/dev/null || {
+  error_bar "Please declare SERVICE_LIST in your environment file"
+  return 1
+}
+
+get_listening_ports() {
+  if isMac; then
+	  netstat -anp tcp | grep LISTEN | awk '{print $4}' | awk -F'.' '{print $NF}' | sort -nu
+  else
+	  netstat -tln | grep LISTEN | awk '{print $4}' | awk -F':' '{print $NF}' | sort -nu
+  fi
+}
+
+ports=()
+for p in $(get_listening_ports); do
+  ports[$p]=1
+done
+
+is_port_open() {
+  [[ -n ${ports[$1]} ]]
+}
+
+labelWidth=0
+calcLabelWidth() {
+    for label in ${(k)SERVICE_LIST}; do
+      (( ${#label} > labelWidth )) && labelWidth=${#label}
+    done
+}
+
+mode=pretty
+show_ports=0
+
+show_help() {
+  APP=services
+  cat <<EOF
+Usage: $APP [OPTIONS]
+
+Options:
+  -h, --help    Show this help message and exit
+  -a, --all     List all services
+  -r, --running List only running services
+  -s, --stopped List only stopped services
+  -np           Hide port numbers
+
+Examples:
+  $APP
+  $APP -r
+  $APP -s
+EOF
+}
+
+_PrettyPrint() {
+	CursorOff
+
+  calcLabelWidth
+
+	local bg=$(AsBg $TextAttrBg)
+	local tDLGB="$BrightWhite;$bg"
+
+	printf "\033[%sm\n   \033[30;107m ≡ %s  \033[0m\n" $bg "$(PadMiddle "Services" $(( labelWidth + 5 )))"
+  local color
+	for service in ${(ok)SERVICE_LIST}; do
+	  local port=${SERVICE_LIST[$service]}
+    if is_port_open "$port"; then
+      color="97;42" # bold white on green
+    else
+      color="37" # normal white
+    fi
+    printf "\033[%sm   \033[97;44m▌\033[%sm %-*s %5d \033[97;44m▐\033[0m\n" "$bg" "$color" "$labelWidth" "$service" "$port"
+  done
+	printf "\033[%sm   \033[%sm" $bg $tDLGB
+	RepeatChar "▀" $(( labelWidth + 10 ))
+  printf "\033[0m\n"
+
+	CursorOn
+}
+
+_Print() {
+  local line=$1
+  [[ $show_ports -eq 0 ]] && line="$line:$2"
+  [[ $mode == 'all' ]] && {
+    if [[ $3 -eq 0 ]]; then
+      line="$line RUNNING"
+    else
+      line="$line stopped"
+    fi
+  }
+  echo "$line"
+}
+
+_GrossPrint() {
+  for service in ${(ok)SERVICE_LIST}; do
+    local port=${SERVICE_LIST[$service]}
+    if is_port_open "$port"; then
+      [[ $mode == 'running' || $mode == 'all' ]] && _Print "$service" "$port" 0
+    else
+      [[ $mode == 'stopped' || $mode == 'all' ]] && _Print "$service" "$port" 1
+    fi
+  done
+}
+
+if (( ${#SERVICE_LIST[@]} == 0 )); then
+  echo "No services found in SERVICE_LIST."
+  exit 1
+fi
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      show_help
+      exit 0
+      ;;
+    -a|--all)
+      mode=all
+      shift
+      ;;
+    -r|--running)
+      mode=running
+      shift
+      ;;
+    -s|--stopped)
+      mode=stopped
+      shift
+      ;;
+    -np)
+      show_ports=1
+      shift
+      ;;
+    *) # unknown short option
+      echo "Unknown option: $1" >&2
+      show_help
+      exit 1
+      ;;
+  esac
+done
+
+[[ $mode == 'pretty' ]] && _PrettyPrint || _GrossPrint
