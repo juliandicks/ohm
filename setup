@@ -3,10 +3,10 @@
 
 MY_PATH=${0:A:h}
 
-DEPS=(menu_zsh turbo_zsh user)
+DEPS=(menu_zsh turbo_zsh)
 
 info() {
-    printf "\e[93;44;1mΩ \033[97;22m%s\033[K\033[0m\n" "$1"
+    printf "\e[93;44;1m Ω \033[97;22m%s\033[K\033[0m\n" "$1"
 }
 info "SETUP"
 source ${MY_PATH}/banner.zsh

@@ -1,0 +1,28 @@
+#!/bin/zsh
+
+source $OHM_PATH/init_lib.zsh
+
+uses crt_lib.zsh
+uses spinner_lib.zsh
+
+pretty_print() {
+	local tHDR="$Black;$(AsBg BrightWhite)"
+  local tDLG="$BrightWhite;$(AsBg Blue)"
+  local tFLD="$BrightYellow"
+  local bg=$(AsBg $TextAttrBg)
+  local tDLGB="$BrightWhite;$bg"
+	CursorOff
+
+	printf "\e[%sm\n   \e[%sm ≡         Configure Spinner            \e[0m\n" ${bg} $tHDR
+	printf "\e[%sm   \e[%sm▌┌────────────────────────────────────┐▐\e[0m\n" ${bg} $tDLG
+	printf "\e[%sm   \e[%sm▌│  SPINNER_FA1                       │▐\e[0m\n" ${bg} $tDLG
+	printf "\e[%sm   \e[%sm▌└────────────────────────────────────┘▐\e[0m\n" ${bg} $tDLG
+	printf "\e[%sm   \e[%sm▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀\e[0m\n" ${bg} $tDLGB
+
+	CursorOn
+
+	# Dialog OptionsArray onChange onSelect onClose
+
+}
+
+pretty_print

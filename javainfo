@@ -1,0 +1,72 @@
+#!/bin/zsh
+# shellcheck disable=SC2154,SC2086
+
+source $OHM_PATH/init_lib.zsh
+
+uses alerts_lib.zsh
+
+exit_if_columns_less_than 80
+
+uses crt_lib.zsh
+uses math_lib.zsh
+uses string_lib.zsh
+
+pretty_print() {
+ 	CursorOff
+
+	local usedW=21
+	local maxW=$(( COLUMNS - usedW ))
+  local java_home=${JAVA_HOME:-Ⓧ Not Configured}
+	local java_path="$(readlink -f $(which java))"
+	local java_version="$(java --version | tail -n 1)"
+	local maxStrW=$(min $maxW $(max ${#java_home} $(max ${#java_path} ${#java_version} )))
+  local dlgW=$(( maxStrW + usedW ))
+
+	local tHDR="$Black;$(AsBg BrightWhite)"
+	local tDLG="$BrightWhite;$(AsBg Blue)"
+	local bg=$(AsBg $TextAttrBg)
+	local tDLGB="$BrightWhite;$bg"
+	local tFLD="$BrightYellow"
+	local sHDR="Developer Environments"
+	local width=$((dlgW - 8))
+	local padded="$(PadMiddle ${sHDR} $width)"
+	printf "\n\e[${bg}m   \e[%sm ≡ %s \e[0m\n" $tHDR $padded
+	printf "\e[${bg}m   \e[%sm▌┌ \e[%smJava\e[%sm %s┐▐\e[0m\n" $tDLG $tFLD $tDLG ${(l:$((dlgW-14))::─:)}
+	printf "\e[${bg}m   \e[%sm▌│ JAVA_HOME: \e[1m%s\e[22m │▐\e[0m\n" $tDLG "$(PadRight "${java_home}" $maxStrW)"
+	printf "\e[${bg}m   \e[%sm▌│      Path: \e[1m%s\e[22m │▐\e[0m\n" $tDLG "$(PadRight "${java_path}" $maxStrW)"
+	printf "\e[${bg}m   \e[%sm▌│   Version: \e[1m%s\e[22m │▐\e[0m\n" $tDLG "$(PadRight "${java_version}" $maxStrW)"
+	printf "\e[${bg}m   \e[%sm▌└%s┘▐\e[0m\n" $tDLG ${(l:$((dlgW-8))::─:)}
+	printf "\e[${bg}m   \e[%sm%s\e[0m\n" $tDLGB ${(l:$((dlgW-4))::▀:)}
+
+	CursorOn
+}
+
+show_help() {
+  cat <<EOF
+Usage: javainfo [OPTIONS]
+
+Options:
+  -h, --help    Show this help message and exit
+
+EOF
+}
+
+parse_options() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)
+        show_help
+        exit 0
+        ;;
+      *)
+        echo "Unknown option: $1" >&2
+        show_help
+        exit 1
+        ;;
+    esac
+  done
+}
+
+parse_options "$@"
+
+pretty_print
