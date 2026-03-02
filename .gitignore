@@ -7,3 +7,4 @@ visier_dev/
 # in case they are symlinks
 menu_zsh
 turbo_zsh
+.DS_Store

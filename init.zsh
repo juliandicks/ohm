@@ -2,6 +2,7 @@
 
 export OHM_PATH=${0:A:h}
 
+source ${OHM_PATH}/version.zsh
 source ${OHM_PATH}/init_lib.zsh
 
 add_path "$OHM_PATH"
