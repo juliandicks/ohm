@@ -7,22 +7,36 @@ uses spinner_lib.zsh
 
 get_computer_name() {
   if command -v scutil &> /dev/null; then
-    scutil --get ComputerName
+    scutil --get ComputerName 2>/dev/null || echo "Unknown Host"
   elif command -v hostnamectl &> /dev/null; then
-    hostnamectl --static
+    hostnamectl --static 2>/dev/null || echo "Unknown Host"
+  elif command -v hostname &> /dev/null; then
+    hostname 2>/dev/null || echo "Unknown Host"
   else
-    hostname
+    echo "Unknown Host"
   fi
 }
 
 get_cpu_model() {
+  local cpu_model
+
   if isMac; then
-	  sysctl -n machdep.cpu.brand_string
+    if command -v sysctl &>/dev/null; then
+      cpu_model=$(sysctl -n machdep.cpu.brand_string 2>/dev/null)
+    fi
   elif isLinux; then
-	  lscpu | awk -F: '/Model name/{print $2}' | sed 's/^[ \t]*//'
+    if command -v lscpu &>/dev/null; then
+      cpu_model=$(lscpu 2>/dev/null | awk -F: '/Model name/{print $2}' | sed 's/^[ \t]*//' | head -n 1)
+    elif [[ -r /proc/cpuinfo ]]; then
+      cpu_model=$(awk -F: '/model name/{print $2; exit}' /proc/cpuinfo | sed 's/^[ \t]*//')
+    fi
   else
-	  grep "model name" /proc/cpuinfo | head -1 | awk -F: '{print $2}' | sed 's/^[ \t]*//'
+    if [[ -r /proc/cpuinfo ]]; then
+      cpu_model=$(awk -F: '/model name/{print $2; exit}' /proc/cpuinfo | sed 's/^[ \t]*//')
+    fi
   fi
+
+  echo "${cpu_model:-Unknown CPU}"
 }
 
 get_linux_os() {
@@ -92,9 +106,13 @@ get_macos_name() {
 }
 
 get_macos_info() {
-  [[ "$(uname)" != "Darwin" ]] && { echo "This function only works on macOS."; return 1; }
+  local product_version
+  [[ "$(uname)" != "Darwin" ]] && { echo "Unknown"; return 0; }
 
-  echo "macOS $(get_macos_name) $(sw_vers -productVersion)"
+  if command -v sw_vers &>/dev/null; then
+    product_version=$(sw_vers -productVersion 2>/dev/null)
+  fi
+  echo "macOS $(get_macos_name) ${product_version:-Unknown}"
 }
 
 get_os() {
@@ -122,8 +140,14 @@ get_mac_core_counts() {
   local performance_cores
   local efficiency_cores
 
+  if ! command -v sysctl &>/dev/null; then
+    echo "N/A"
+    return 0
+  fi
+
   # Get total physical cores
-  total_cores=$(sysctl -n hw.physicalcpu)  
+  total_cores=$(sysctl -n hw.physicalcpu 2>/dev/null)
+  total_cores=${total_cores:-N/A}
   # Get performance cores (P-cores)
   performance_cores=$(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || echo "N/A")
   # Get efficiency cores (E-cores)
@@ -141,8 +165,10 @@ get_mac_core_counts() {
 get_ubuntu_core_counts() {
   local total_cores
 
-  total_cores=$(grep -c '^model name' /proc/cpuinfo)
-  echo "$total_cores"
+  if [[ -r /proc/cpuinfo ]]; then
+    total_cores=$(grep -c '^model name' /proc/cpuinfo 2>/dev/null)
+  fi
+  echo "${total_cores:-N/A}"
 }
 
 get_mac_memory() {
@@ -156,17 +182,25 @@ get_mac_memory() {
   local used_mem_gb
 
   if [[ "$(uname)" != "Darwin" ]]; then
-    echo "This function only works on macOS."
-    return 1
+    echo "0.0 1"
+    return 0
+  fi
+  if ! command -v sysctl &>/dev/null || ! command -v vm_stat &>/dev/null; then
+    echo "0.0 1"
+    return 0
   fi
 
   # Get total memory in bytes
-  total_mem_bytes=$(sysctl -n hw.memsize)
+  total_mem_bytes=$(sysctl -n hw.memsize 2>/dev/null)
+  total_mem_bytes=${total_mem_bytes:-0}
 
   # Get free memory (inactive + free) from vm_stat (pages * page size)
   page_size=$(vm_stat | awk '/page size of/ {print $(NF-1)}')  # Extract page size in bytes
   free_pages=$(vm_stat | awk '/Pages free/ {print $NF}')   # Get free pages
   inactive_pages=$(vm_stat | awk '/Pages inactive/ {print $NF}')  # Get inactive pages
+  page_size=${page_size:-0}
+  free_pages=${free_pages:-0}
+  inactive_pages=${inactive_pages:-0}
   free_mem_bytes=$(( (free_pages + inactive_pages) * page_size ))
 
   # Calculate used memory
@@ -175,6 +209,9 @@ get_mac_memory() {
   # Convert bytes to GB
   total_mem_gb=$(awk "BEGIN {print $total_mem_bytes / 1073741824}")   # Convert to GB
   used_mem_gb=$(awk "BEGIN {print $used_mem_bytes / 1073741824}")     # Convert to GB
+  total_mem_gb=${total_mem_gb:-1}
+  used_mem_gb=${used_mem_gb:-0}
+  (( ${total_mem_gb%.*} <= 0 )) && total_mem_gb=1
 
   printf "%.1f %d" ${used_mem_gb} ${total_mem_gb}
 }
@@ -186,14 +223,16 @@ get_ubuntu_memory() {
   local total_mem_gb
   local used_mem_gb
 
-  if [[ "$(uname)" != "Linux" ]]; then
-    echo "This function only works on Ubuntu/Linux."
-    return 1
+  if [[ "$(uname)" != "Linux" || ! -r /proc/meminfo ]]; then
+    echo "0.0 1"
+    return 0
   fi
 
   # Get total and available memory from /proc/meminfo (in KB)
   total_mem_kb=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
   available_mem_kb=$(awk '/MemAvailable/ {print $2}' /proc/meminfo)
+  total_mem_kb=${total_mem_kb:-0}
+  available_mem_kb=${available_mem_kb:-0}
 
   # Calculate used memory (total - available)
   used_mem_kb=$((total_mem_kb - available_mem_kb))
@@ -201,6 +240,9 @@ get_ubuntu_memory() {
   # Convert KB to GB
   total_mem_gb=$(awk "BEGIN {print $total_mem_kb / 1048576}")   # 1 GB = 1048576 KB
   used_mem_gb=$(awk "BEGIN {print $used_mem_kb / 1048576}")
+  total_mem_gb=${total_mem_gb:-1}
+  used_mem_gb=${used_mem_gb:-0}
+  (( ${total_mem_gb%.*} <= 0 )) && total_mem_gb=1
 
   printf "%.1f %d\n" ${used_mem_gb} ${total_mem_gb}
 }
@@ -226,6 +268,10 @@ get_swap_space() {
   local swap_used_kb
 
   if [[ "$(uname)" == "Darwin" ]]; then
+    if ! command -v sysctl &>/dev/null; then
+      echo "0.0 0"
+      return 0
+    fi
     # macOS: Get swap usage from sysctl
     swap_info=$(sysctl -n vm.swapusage 2>/dev/null)
 
@@ -264,8 +310,8 @@ get_swap_space() {
     swap_used_gb=$(awk "BEGIN {print $swap_used_kb / 1048576}")
 
   else
-    echo "Unsupported OS"
-    return 1
+    echo "0.0 0"
+    return 0
   fi
 
   printf "%.1f %.0f\n" "$swap_used_gb" "$swap_total_gb"
@@ -279,19 +325,30 @@ get_root_disk_space() {
 
   if isMac; then
     # macOS: Get disk usage using df
-    disk_info=$(df -h / | awk 'NR==2 {print $3, $2, $5}')  # Extract "Used", "Total", "Percentage Used"
+    if command -v df &>/dev/null; then
+      disk_info=$(df -h / 2>/dev/null | awk 'NR==2 {print $3, $2, $5}')  # Extract "Used", "Total", "Percentage Used"
+    fi
   elif isLinux; then
     # Linux: Get disk usage using df
-    disk_info=$(df -h --output=used,size,pcent / | tail -n 1)  # Extract "Used", "Total", "Percentage Used"
+    if command -v df &>/dev/null; then
+      disk_info=$(df -h --output=used,size,pcent / 2>/dev/null | tail -n 1)  # Extract "Used", "Total", "Percentage Used"
+    fi
   else
-    echo "Unknown OS"
-    return 1
+    echo "N/A N/A 0"
+    return 0
+  fi
+  if [[ -z "${disk_info:-}" ]]; then
+    echo "N/A N/A 0"
+    return 0
   fi
 
   # Assign values to variables
   used_space=$(echo "$disk_info" | awk '{print $1}')       # Used space
   total_space=$(echo "$disk_info" | awk '{print $2}')      # Total space
   used_percentage=$(echo "$disk_info" | awk '{print $3}' | tr -d '%')  # Percentage used (strip % sign)
+  used_space=${used_space:-N/A}
+  total_space=${total_space:-N/A}
+  used_percentage=${used_percentage:-0}
 
   printf "%s %s %d\n" "$used_space" "$total_space" "$used_percentage"
 }
