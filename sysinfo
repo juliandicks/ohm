@@ -25,45 +25,28 @@ get_cpu_model() {
   fi
 }
 
-get_ubuntu_os() {
-  local version_number
-  local version_name
-  local human_name
-  local -A ubuntu_names
+get_linux_os() {
+  local pretty_name
 
-  if [[ "$(uname)" != "Linux" ]]; then
-    echo "This function only works on Ubuntu/Linux."
-    return 1
+  [[ "$(uname)" == "Linux" ]] || { echo "This function only works on Linux."; return 1; }
+
+  if [[ -r "/etc/os-release" ]]; then
+    pretty_name=$(awk -F= '/^PRETTY_NAME=/{gsub(/^"|"$/, "", $2); print $2; exit}' /etc/os-release)
+    if [[ -n "$pretty_name" ]]; then
+      echo "$pretty_name"
+      return 0
+    fi
   fi
 
-  # Check if lsb_release is available
   if command -v lsb_release &>/dev/null; then
-    version_number=$(lsb_release -sr)  # Get Ubuntu version (e.g., "22.04")
-    version_name=$(lsb_release -sc)    # Get Ubuntu codename (e.g., "jammy")
-  elif [[ -f "/etc/os-release" ]]; then
-    # Alternative method for modern Ubuntu
-    version_number=$(awk -F= '/VERSION_ID/ {print $2}' /etc/os-release | tr -d '"')
-    version_name=$(awk -F= '/VERSION_CODENAME/ {print $2}' /etc/os-release)
-  else
-    echo "Cannot determine Ubuntu version."
-    return 1
+    pretty_name=$(lsb_release -ds 2>/dev/null | sed 's/^"//; s/"$//')
+    if [[ -n "$pretty_name" ]]; then
+      echo "$pretty_name"
+      return 0
+    fi
   fi
 
-  # Map Ubuntu codename to human-readable label
-  ubuntu_names=(
-    ["mantic"]="Mantic Minotaur"
-    ["lunar"]="Lunar Lobster"
-    ["jammy"]="Jammy Jellyfish"
-    ["focal"]="Focal Fossa"
-    ["bionic"]="Bionic Beaver"
-    ["xenial"]="Xenial Xerus"
-    ["trusty"]="Trusty Tahr"
-    ["noble"]="Noble Numbat"
-    ["plucky"]="Plucky Puffin"
-  )
-  human_name=${ubuntu_names[$version_name]:-"Unknown Version"}
-
-  echo "Ubuntu $version_number ($human_name)"
+  uname -sr
 }
 
 get_macos_name() {
@@ -118,7 +101,7 @@ get_os() {
 	if isMac; then
 		get_macos_info
 	elif isLinux; then
-		get_ubuntu_os
+		get_linux_os
 	else
 		echo "Unknown"
 	fi
