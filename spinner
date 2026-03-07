@@ -1,6 +1,6 @@
 #!/bin/zsh
 
-source $OHM_PATH/init_lib.zsh
+: "${OHM_PATH:?OHM_PATH is not set. Source init.zsh first.}"; source "${OHM_PATH}/init_lib.zsh" || { print -u2 -- "Failed to source ${OHM_PATH}/init_lib.zsh"; exit 1; }
 
 uses crt_lib.zsh
 uses spinner_lib.zsh
