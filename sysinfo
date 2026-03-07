@@ -26,13 +26,13 @@ get_cpu_model() {
     fi
   elif isLinux; then
     if command -v lscpu &>/dev/null; then
-      cpu_model=$(lscpu 2>/dev/null | awk -F: '/Model name/{print $2}' | sed 's/^[ \t]*//' | head -n 1)
+      cpu_model=$(lscpu 2>/dev/null | awk -F: '/Model name/{sub(/^[ \t]+/, "", $2); print $2; exit}')
     elif [[ -r /proc/cpuinfo ]]; then
-      cpu_model=$(awk -F: '/model name/{print $2; exit}' /proc/cpuinfo | sed 's/^[ \t]*//')
+      cpu_model=$(awk -F: '/model name/{sub(/^[ \t]+/, "", $2); print $2; exit}' /proc/cpuinfo)
     fi
   else
     if [[ -r /proc/cpuinfo ]]; then
-      cpu_model=$(awk -F: '/model name/{print $2; exit}' /proc/cpuinfo | sed 's/^[ \t]*//')
+      cpu_model=$(awk -F: '/model name/{sub(/^[ \t]+/, "", $2); print $2; exit}' /proc/cpuinfo)
     fi
   fi
 
@@ -53,7 +53,9 @@ get_linux_os() {
   fi
 
   if command -v lsb_release &>/dev/null; then
-    pretty_name=$(lsb_release -ds 2>/dev/null | sed 's/^"//; s/"$//')
+    pretty_name=$(lsb_release -ds 2>/dev/null)
+    pretty_name=${pretty_name#\"}
+    pretty_name=${pretty_name%\"}
     if [[ -n "$pretty_name" ]]; then
       echo "$pretty_name"
       return 0
@@ -176,6 +178,7 @@ get_mac_memory() {
   local page_size
   local free_pages
   local inactive_pages
+  local vmstat_out
   local free_mem_bytes
   local used_mem_bytes
   local total_mem_gb
@@ -195,9 +198,15 @@ get_mac_memory() {
   total_mem_bytes=${total_mem_bytes:-0}
 
   # Get free memory (inactive + free) from vm_stat (pages * page size)
-  page_size=$(vm_stat | awk '/page size of/ {print $(NF-1)}')  # Extract page size in bytes
-  free_pages=$(vm_stat | awk '/Pages free/ {print $NF}')   # Get free pages
-  inactive_pages=$(vm_stat | awk '/Pages inactive/ {print $NF}')  # Get inactive pages
+  vmstat_out=$(vm_stat 2>/dev/null)
+  read -r page_size free_pages inactive_pages < <(
+    awk '
+      /page size of/ {ps=$(NF-1)}
+      /Pages free/ {gsub(/\./, "", $3); fp=$3}
+      /Pages inactive/ {gsub(/\./, "", $3); ip=$3}
+      END {print ps+0, fp+0, ip+0}
+    ' <<< "$vmstat_out"
+  )
   page_size=${page_size:-0}
   free_pages=${free_pages:-0}
   inactive_pages=${inactive_pages:-0}
@@ -229,8 +238,13 @@ get_ubuntu_memory() {
   fi
 
   # Get total and available memory from /proc/meminfo (in KB)
-  total_mem_kb=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
-  available_mem_kb=$(awk '/MemAvailable/ {print $2}' /proc/meminfo)
+  read -r total_mem_kb available_mem_kb < <(
+    awk '
+      /MemTotal/ {t=$2}
+      /MemAvailable/ {a=$2}
+      END {print t+0, a+0}
+    ' /proc/meminfo
+  )
   total_mem_kb=${total_mem_kb:-0}
   available_mem_kb=${available_mem_kb:-0}
 
@@ -295,8 +309,13 @@ get_swap_space() {
 
   elif [[ -f "/proc/meminfo" ]]; then
     # Linux: Get swap space from /proc/meminfo (in KB)
-    swap_total_kb=$(awk '/SwapTotal/ {print $2}' /proc/meminfo)
-    swap_free_kb=$(awk '/SwapFree/ {print $2}' /proc/meminfo)
+    read -r swap_total_kb swap_free_kb < <(
+      awk '
+        /SwapTotal/ {t=$2}
+        /SwapFree/ {f=$2}
+        END {print t+0, f+0}
+      ' /proc/meminfo
+    )
 
     # If no swap is allocated, set values to 0
     swap_total_kb=${swap_total_kb:-0}
@@ -322,6 +341,7 @@ get_root_disk_space() {
   local used_space
   local total_space
   local used_percentage
+  local percent_token
 
   if isMac; then
     # macOS: Get disk usage using df
@@ -343,9 +363,12 @@ get_root_disk_space() {
   fi
 
   # Assign values to variables
-  used_space=$(echo "$disk_info" | awk '{print $1}')       # Used space
-  total_space=$(echo "$disk_info" | awk '{print $2}')      # Total space
-  used_percentage=$(echo "$disk_info" | awk '{print $3}' | tr -d '%')  # Percentage used (strip % sign)
+  set -- $disk_info
+  used_space=$1
+  total_space=$2
+  percent_token=$3
+  used_percentage=${percent_token%\%}
+  used_percentage=${used_percentage//[^0-9]/}
   used_space=${used_space:-N/A}
   total_space=${total_space:-N/A}
   used_percentage=${used_percentage:-0}
@@ -354,11 +377,20 @@ get_root_disk_space() {
 }
 
 draw_bar() {
-  local percent=$1
-  local length=$2
-  local filled_chars=$(( (percent * length) / 100 ))
+  local percent="${1:-0}"
+  local length="${2:-0}"
+  local filled_chars=0
   local bar=""
   local i
+
+  percent=${percent//[^0-9-]/}
+  length=${length//[^0-9]/}
+  [[ -z "$percent" ]] && percent=0
+  [[ -z "$length" ]] && length=0
+  (( percent < 0 )) && percent=0
+  (( percent > 100 )) && percent=100
+  (( length < 0 )) && length=0
+  filled_chars=$(( (percent * length) / 100 ))
 
   for ((i=0; i<filled_chars; i++)); do
     bar+="░"
