@@ -26,6 +26,11 @@ get_cpu_model() {
 }
 
 get_ubuntu_os() {
+  local version_number
+  local version_name
+  local human_name
+  local -A ubuntu_names
+
   if [[ "$(uname)" != "Linux" ]]; then
     echo "This function only works on Ubuntu/Linux."
     return 1
@@ -45,7 +50,7 @@ get_ubuntu_os() {
   fi
 
   # Map Ubuntu codename to human-readable label
-  declare -A ubuntu_names=(
+  ubuntu_names=(
     ["mantic"]="Mantic Minotaur"
     ["lunar"]="Lunar Lobster"
     ["jammy"]="Jammy Jellyfish"
@@ -62,6 +67,9 @@ get_ubuntu_os() {
 }
 
 get_macos_name() {
+  local major
+  local minor
+
   [[ "$(uname)" != "Darwin" ]] && { echo "This function only works on macOS."; return 1; }
 
   # Extract major and minor macOS version
@@ -127,6 +135,10 @@ get_core_counts() {
 }
 
 get_mac_core_counts() {
+  local total_cores
+  local performance_cores
+  local efficiency_cores
+
   # Get total physical cores
   total_cores=$(sysctl -n hw.physicalcpu)  
   # Get performance cores (P-cores)
@@ -144,11 +156,22 @@ get_mac_core_counts() {
 }
 
 get_ubuntu_core_counts() {
+  local total_cores
+
   total_cores=$(grep -c '^model name' /proc/cpuinfo)
   echo "$total_cores"
 }
 
 get_mac_memory() {
+  local total_mem_bytes
+  local page_size
+  local free_pages
+  local inactive_pages
+  local free_mem_bytes
+  local used_mem_bytes
+  local total_mem_gb
+  local used_mem_gb
+
   if [[ "$(uname)" != "Darwin" ]]; then
     echo "This function only works on macOS."
     return 1
@@ -174,6 +197,12 @@ get_mac_memory() {
 }
 
 get_ubuntu_memory() {
+  local total_mem_kb
+  local available_mem_kb
+  local used_mem_kb
+  local total_mem_gb
+  local used_mem_gb
+
   if [[ "$(uname)" != "Linux" ]]; then
     echo "This function only works on Ubuntu/Linux."
     return 1
@@ -204,6 +233,15 @@ get_memory() {
 }
 
 get_swap_space() {
+  local swap_info
+  local swap_used_gb
+  local swap_total_gb
+  local swap_used_mb
+  local swap_total_mb
+  local swap_total_kb
+  local swap_free_kb
+  local swap_used_kb
+
   if [[ "$(uname)" == "Darwin" ]]; then
     # macOS: Get swap usage from sysctl
     swap_info=$(sysctl -n vm.swapusage 2>/dev/null)
@@ -251,6 +289,11 @@ get_swap_space() {
 }
 
 get_root_disk_space() {
+  local disk_info
+  local used_space
+  local total_space
+  local used_percentage
+
   if isMac; then
     # macOS: Get disk usage using df
     disk_info=$(df -h / | awk 'NR==2 {print $3, $2, $5}')  # Extract "Used", "Total", "Percentage Used"
@@ -275,6 +318,8 @@ draw_bar() {
   local length=$2
   local filled_chars=$(( (percent * length) / 100 ))
   local bar=""
+  local i
+
   for ((i=0; i<filled_chars; i++)); do
     bar+="░"
   done
@@ -293,6 +338,13 @@ pretty_print() {
 	local cpu_model="$(get_cpu_model)"
 	local cpu_cores="$(get_core_counts)"
 	local os_info="$(get_os)"
+  local swapUsedG
+  local swapTotalG
+  local ramUsedG
+  local ramTotalG
+  local rootUsed
+  local rootTotal
+  local rootPerc
 	read -r swapUsedG swapTotalG < <(get_swap_space)
 	read -r ramUsedG ramTotalG < <(get_memory)
 	local ramUsedPerc=$(printf "%d" $((ramUsedG*100/ramTotalG)) )
