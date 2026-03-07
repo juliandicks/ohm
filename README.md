@@ -60,12 +60,28 @@ ohm/
 ```zsh
 # Clone the repository
 git clone <repo-url> ~/ohm
+cd ~/ohm
+
+# Install dependencies and create local config templates
+./setup
 
 # Add to your .zshrc
 echo 'source ~/ohm/init.zsh' >> ~/.zshrc
 
 # Reload shell
 source ~/.zshrc
+```
+
+### Verify Install
+
+```zsh
+ohm doctor
+```
+
+If you need to regenerate user config files:
+
+```zsh
+ohm config init
 ```
 
 ### Launch the Menu

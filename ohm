@@ -1,0 +1,240 @@
+#!/bin/zsh
+# shellcheck disable=SC2154,SC2086
+
+set -u
+
+OHM_PATH=${0:A:h}
+
+info() {
+  printf "\e[93;44;1m Ω \e[97;22m%s\e[K\e[0m\n" "$1"
+}
+
+ok() {
+  printf "\e[97;44m  [OK] \e[37m%s\e[K\e[0m\n" "$1"
+}
+
+warn() {
+  printf "  [WARN] %s\n" "$1"
+}
+
+err() {
+  printf "  [FAIL] %s\n" "$1"
+}
+
+host_short() {
+  if [[ -n "${HOST:-}" ]]; then
+    echo "${HOST%%.*}"
+  else
+    hostname | cut -d. -f1
+  fi
+}
+
+user_dir() { echo "${OHM_PATH}/user"; }
+user_menu_file() { echo "$(user_dir)/m.mnu"; }
+user_env_file() { echo "$(user_dir)/env_${USER}_$(host_short)"; }
+
+write_menu_template() {
+  local file=$1
+  cat > "$file" <<'EOF'
+#!/bin/zsh
+# User menu for Ohm
+# This file is intentionally minimal; customize labels/commands as needed.
+
+menuTitle="Main Menu"
+menuLabels=("System Info" "Java Info" "Services")
+menuCommands=("_popup sysinfo" "_popup javainfo" "_cmd services")
+EOF
+}
+
+write_env_template() {
+  local file=$1
+  cat > "$file" <<'EOF'
+#!/bin/zsh
+# User+host environment for Ohm services script
+
+typeset -A SERVICE_LIST=(
+  [ssh]=22
+  [postgres]=5432
+  [redis]=6379
+)
+EOF
+}
+
+config_init() {
+  local created=0
+  local updated=0
+  local udir
+  local mfile
+  local efile
+  udir=$(user_dir)
+  mfile=$(user_menu_file)
+  efile=$(user_env_file)
+
+  mkdir -p "$udir"
+
+  if [[ ! -f "$mfile" ]]; then
+    write_menu_template "$mfile"
+    chmod +x "$mfile" 2>/dev/null || true
+    ok "Created $(basename "$mfile")"
+    ((created++))
+  else
+    ok "Menu config exists: $mfile"
+  fi
+
+  if [[ ! -f "$efile" ]]; then
+    write_env_template "$efile"
+    chmod +x "$efile" 2>/dev/null || true
+    ok "Created $(basename "$efile")"
+    ((created++))
+  else
+    ok "Env config exists: $efile"
+  fi
+
+  local menu_dep_file="${OHM_PATH}/menu_zsh/m.mnu"
+  if [[ -f "$mfile" && -f "$menu_dep_file" ]]; then
+    if ! cmp -s "$mfile" "$menu_dep_file"; then
+      cp "$mfile" "$menu_dep_file"
+      warn "Synced user/m.mnu -> menu_zsh/m.mnu for current menu engine"
+      ((updated++))
+    fi
+  fi
+
+  info "Config init complete (${created} created, ${updated} updated)"
+}
+
+doctor() {
+  local failed=0
+  local warned=0
+  local zshrc="${HOME}/.zshrc"
+  local hook="source ${OHM_PATH}/init.zsh"
+
+  info "Doctor"
+
+  command -v zsh >/dev/null 2>&1 && ok "zsh available" || { err "zsh missing"; ((failed++)); }
+  command -v git >/dev/null 2>&1 && ok "git available" || { err "git missing"; ((failed++)); }
+
+  if [[ -f "${OHM_PATH}/init.zsh" ]]; then
+    ok "init.zsh present"
+  else
+    err "Missing init.zsh"
+    ((failed++))
+  fi
+
+  if [[ -d "${OHM_PATH}/menu_zsh" ]]; then
+    ok "menu_zsh present"
+  else
+    err "menu_zsh missing (run ./setup)"
+    ((failed++))
+  fi
+
+  local menu_launcher="${OHM_PATH}/menu_zsh/m.sh"
+  if [[ -f "$menu_launcher" ]]; then
+    if [[ -x "$menu_launcher" ]]; then
+      ok "menu launcher executable"
+    else
+      warn "menu launcher not executable; fixing with chmod +x"
+      if chmod +x "$menu_launcher" 2>/dev/null; then
+        ok "Fixed menu launcher permissions"
+      else
+        err "Unable to set execute permission on $menu_launcher"
+        ((failed++))
+      fi
+      ((warned++))
+    fi
+  else
+    err "Missing menu launcher: $menu_launcher"
+    ((failed++))
+  fi
+
+  if [[ -d "${OHM_PATH}/turbo_zsh" ]]; then
+    ok "turbo_zsh present"
+  else
+    err "turbo_zsh missing (run ./setup)"
+    ((failed++))
+  fi
+
+  if [[ -f "$(user_menu_file)" ]]; then
+    ok "user menu exists"
+  else
+    warn "Missing user menu: $(user_menu_file) (run ./ohm config init)"
+    ((warned++))
+  fi
+
+  if [[ -f "$(user_env_file)" ]]; then
+    ok "user env exists"
+  else
+    warn "Missing user env: $(user_env_file) (run ./ohm config init)"
+    ((warned++))
+  fi
+
+  if [[ -f "$zshrc" ]] && grep -Fq "$hook" "$zshrc"; then
+    ok "shell hook present in ~/.zshrc"
+  else
+    warn "shell hook missing from ~/.zshrc"
+    echo "       Add: $hook"
+    ((warned++))
+  fi
+
+  if (( failed > 0 )); then
+    err "Doctor found ${failed} failure(s), ${warned} warning(s)"
+    return 1
+  fi
+
+  info "Doctor passed (${warned} warning(s))"
+}
+
+show_help() {
+  cat <<EOF
+Usage: ./ohm <command> [args]
+
+Commands:
+  doctor          Validate install and configuration
+  config init     Create missing user config templates
+  version         Print version information
+  help            Show this help
+EOF
+}
+
+main() {
+  local cmd="${1:-help}"
+  case "$cmd" in
+    doctor)
+      shift
+      doctor "$@"
+      ;;
+    config)
+      shift
+      case "${1:-}" in
+        init)
+          shift
+          config_init "$@"
+          ;;
+        *)
+          err "Unknown config subcommand: ${1:-<none>}"
+          show_help
+          return 1
+          ;;
+      esac
+      ;;
+    version)
+      if [[ -f "${OHM_PATH}/init.zsh" ]]; then
+        # shellcheck source=/dev/null
+        source "${OHM_PATH}/init.zsh"
+        ohm_version
+      else
+        err "Missing init.zsh"
+        return 1
+      fi
+      ;;
+    help|-h|--help)
+      show_help
+      ;;
+    *)
+      err "Unknown command: $cmd"
+      show_help
+      return 1
+      ;;
+  esac
+}
+
+main "$@"
