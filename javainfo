@@ -17,8 +17,27 @@ pretty_print() {
 	local usedW=21
 	local maxW=$(( COLUMNS - usedW ))
   local java_home=${JAVA_HOME:-Ⓧ Not Configured}
-	local java_path="$(readlink -f $(which java))"
-	local java_version="$(java --version | tail -n 1)"
+	local java_path="Ⓧ Not Installed"
+	local java_version="Ⓧ Not Installed"
+  local java_cmd
+  local java_output
+
+  if command -v java >/dev/null 2>&1; then
+    java_cmd="$(command -v java 2>/dev/null)"
+    if [[ -n "$java_cmd" ]]; then
+      java_path="$java_cmd"
+    fi
+
+    java_output="$(java --version 2>&1)"
+    if [[ $? -eq 0 ]]; then
+      java_version="$(print -r -- "$java_output" | tail -n 1)"
+    elif [[ "$java_output" == *"Unable to locate a Java Runtime"* ]]; then
+      java_version="Ⓧ Not Installed"
+    else
+      java_version="Ⓧ Unavailable"
+    fi
+  fi
+
 	local maxStrW=$(min $maxW $(max ${#java_home} $(max ${#java_path} ${#java_version} )))
   local dlgW=$(( maxStrW + usedW ))
 
