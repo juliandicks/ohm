@@ -146,8 +146,25 @@ pull_dep() {
   git -C "$target" pull --ff-only || return 1
 }
 
+pull_self_repo() {
+  local target="${MY_PATH}"
+  [[ -d "$target/.git" ]] || return 0
+
+  if (( OFFLINE == 1 )); then
+    warn "Offline mode: skipping update for ohm"
+    return 0
+  fi
+
+  info "Updating ohm"
+  git -C "$target" pull --ff-only || return 1
+}
+
 ensure_dependencies() {
   info "Ensuring dependencies (${MODE})"
+
+  if [[ "$MODE" == "update" ]]; then
+    pull_self_repo || return 1
+  fi
 
   local dep target
   for dep in "${DEPS[@]}"; do
