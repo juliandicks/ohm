@@ -392,10 +392,7 @@ get_root_disk_space() {
   fi
 
   # Assign values to variables
-  set -- $disk_info
-  used_space=$1
-  total_space=$2
-  percent_token=$3
+  read -r used_space total_space percent_token <<< "$disk_info"
   used_percentage=${percent_token%\%}
   used_percentage=${used_percentage//[^0-9]/}
   used_space=${used_space:-N/A}
