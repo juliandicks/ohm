@@ -159,13 +159,84 @@ print_header() {
   print "Runs: ${RUNS}  Target: ${TARGET_MS}ms"
 }
 
+format_human_score() {
+  local value=$1
+  awk -v v="$value" 'BEGIN {
+    if (v >= 1000000000) printf "%.2fB", v / 1000000000.0;
+    else if (v >= 1000000) printf "%.2fM", v / 1000000.0;
+    else if (v >= 1000) printf "%.2fK", v / 1000.0;
+    else printf "%.0f", v;
+  }'
+}
+
+format_ms_1dp() {
+  local value=$1
+  awk -v v="$value" 'BEGIN {printf "%.1f", v}'
+}
+
+fill_char() {
+  local n=$1
+  local ch=$2
+  local out=""
+  local i
+  for (( i = 0; i < n; i++ )); do
+    out+="$ch"
+  done
+  print -r -- "$out"
+}
+
+pretty_print() {
+  local runs="${1-}"; shift || true
+  local target_ms="${1-}"; shift || true
+  local int_iters="${1-}"; shift || true
+  local int_ms="${1-}"; shift || true
+  local int_score_h="${1-}"; shift || true
+  local float_iters="${1-}"; shift || true
+  local float_ms="${1-}"; shift || true
+  local float_score_h="${1-}"; shift || true
+  local composite_h="${1-}"
+  local int_ms_display
+  local float_ms_display
+
+  local tHDR="30;107"
+  local tDLG="97;44"
+  local tFLD="93"
+  local bg="40"
+  local tDLGB="97;40"
+  local innerW=60
+  local dlgW=$(( innerW + 8 ))
+  local section_fill=$(( dlgW - 19 ))
+  local border_fill=$(( dlgW - 8 ))
+  local header="CPU Benchmark"
+  local section_bar
+  local border_bar
+  local bottom_bar
+
+  (( section_fill < 1 )) && section_fill=1
+  (( border_fill < 1 )) && border_fill=1
+  section_bar=$(fill_char "$section_fill" "─")
+  border_bar=$(fill_char "$border_fill" "─")
+  bottom_bar=$(fill_char "$((dlgW-4))" "▀")
+  int_ms_display=$(format_ms_1dp "$int_ms")
+  float_ms_display=$(format_ms_1dp "$float_ms")
+
+  printf "\n\e[%sm   \e[%sm ≡ %s \e[0m\n" "$bg" "$tHDR" "$(printf '%-60s' "$header")"
+  printf "\e[%sm   \e[%sm▌┌ \e[%smBenchmark\e[%sm %s┐▐\e[0m\n" "$bg" "$tDLG" "$tFLD" "$tDLG" "$section_bar"
+  printf "\e[%sm   \e[%sm▌│ %-58s │▐\e[0m\n" "$bg" "$tDLG" "Runs: ${runs}   Target: ${target_ms}ms"
+  printf "\e[%sm   \e[%sm▌│ %-58s │▐\e[0m\n" "$bg" "$tDLG" "Integer   iters=${int_iters} median=${int_ms_display}ms score=${int_score_h}"
+  printf "\e[%sm   \e[%sm▌│ %-58s │▐\e[0m\n" "$bg" "$tDLG" "Float     iters=${float_iters} median=${float_ms_display}ms score=${float_score_h}"
+  printf "\e[%sm   \e[%sm▌│ %-58s │▐\e[0m\n" "$bg" "$tDLG" "CPU_SCORE ${composite_h}"
+  printf "\e[%sm   \e[%sm▌└%s┘▐\e[0m\n" "$bg" "$tDLG" "$border_bar"
+  printf "\e[%sm   \e[%sm%s\e[0m\n" "$bg" "$tDLGB" "$bottom_bar"
+}
+
 main() {
   parse_options "$@"
-  print_header
 
   local int_mode int_iters int_ms
   local float_mode float_iters float_ms
   local int_score float_score composite
+  local int_score_h float_score_h composite_h
 
   read -r int_mode int_iters int_ms <<< "$(run_suite int)"
   read -r float_mode float_iters float_ms <<< "$(run_suite float)"
@@ -173,12 +244,15 @@ main() {
   int_score=$(awk -v n="$int_iters" -v ms="$int_ms" 'BEGIN {printf "%.0f", (n * 1000.0) / ms}')
   float_score=$(awk -v n="$float_iters" -v ms="$float_ms" 'BEGIN {printf "%.0f", (n * 1000.0) / ms}')
   composite=$(awk -v a="$int_score" -v b="$float_score" 'BEGIN {printf "%.0f", sqrt(a*b)}')
+  int_score_h=$(format_human_score "$int_score")
+  float_score_h=$(format_human_score "$float_score")
+  composite_h=$(format_human_score "$composite")
 
   if (( QUIET == 0 )); then
-    print "Integer: iters=${int_iters} median=${int_ms}ms score=${int_score}"
-    print "Float:   iters=${float_iters} median=${float_ms}ms score=${float_score}"
+    pretty_print "$RUNS" "$TARGET_MS" "$int_iters" "$int_ms" "$int_score_h" "$float_iters" "$float_ms" "$float_score_h" "$composite_h"
+  else
+    print "CPU_SCORE=${composite}"
   fi
-  print "CPU_SCORE=${composite}"
 }
 
 main "$@"
