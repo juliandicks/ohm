@@ -1,0 +1,184 @@
+#!/bin/zsh
+
+set -u
+
+zmodload zsh/datetime 2>/dev/null || true
+
+RUNS=5
+TARGET_MS=700
+QUIET=0
+
+show_help() {
+  cat <<EOF
+Usage: cpubench [OPTIONS]
+
+Simple CPU benchmark for cross-machine comparison (no install required).
+
+Options:
+  -r, --runs N        Number of measured runs per workload (default: ${RUNS})
+  -t, --target-ms N   Target milliseconds for calibration run (default: ${TARGET_MS})
+  -q, --quiet         Print only final scores
+  -h, --help          Show this help message
+EOF
+}
+
+parse_options() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -r|--runs)
+        RUNS=${2:-}
+        shift 2
+        ;;
+      -t|--target-ms)
+        TARGET_MS=${2:-}
+        shift 2
+        ;;
+      -q|--quiet)
+        QUIET=1
+        shift
+        ;;
+      -h|--help)
+        show_help
+        exit 0
+        ;;
+      *)
+        print -u2 -- "Unknown option: $1"
+        show_help
+        exit 1
+        ;;
+    esac
+  done
+
+  [[ "$RUNS" == <-> ]] || { print -u2 -- "--runs must be an integer"; exit 1; }
+  [[ "$TARGET_MS" == <-> ]] || { print -u2 -- "--target-ms must be an integer"; exit 1; }
+  (( RUNS > 0 )) || { print -u2 -- "--runs must be > 0"; exit 1; }
+  (( TARGET_MS > 0 )) || { print -u2 -- "--target-ms must be > 0"; exit 1; }
+}
+
+now_ms() {
+  if [[ -n "${EPOCHREALTIME:-}" ]]; then
+    local -F t=$EPOCHREALTIME
+    print $(( t * 1000 ))
+  else
+    print $(( $(date +%s) * 1000 ))
+  fi
+}
+
+run_workload() {
+  local mode=$1
+  local n=$2
+
+  case "$mode" in
+    int)
+      awk -v n="$n" '
+        BEGIN {
+          x = 123456789
+          s = 0
+          for (i = 0; i < n; i++) {
+            x = (x * 1664525 + 1013904223) % 4294967296
+            s += (x % 997)
+          }
+          printf "%.0f\n", s
+        }'
+      ;;
+    float)
+      awk -v n="$n" '
+        BEGIN {
+          x = 0.5
+          y = 0
+          for (i = 1; i <= n; i++) {
+            x = (x * 1.000001) + ((i % 97) * 0.0000003)
+            y += x / (1.0 + (i % 19))
+          }
+          printf "%.6f\n", y
+        }'
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+measure_ms() {
+  local mode=$1
+  local n=$2
+  local start end elapsed sink
+  start=$(now_ms)
+  sink=$(run_workload "$mode" "$n")
+  end=$(now_ms)
+  elapsed=$(( end - start ))
+  (( elapsed <= 0 )) && elapsed=1
+  print "$elapsed"
+}
+
+calibrate_iters() {
+  local mode=$1
+  local iters=200000
+  local elapsed=0
+  local i scaled
+
+  for i in 1 2 3; do
+    elapsed=$(measure_ms "$mode" "$iters")
+    (( elapsed <= 0 )) && elapsed=1
+    scaled=$(awk -v n="$iters" -v t="$TARGET_MS" -v e="$elapsed" 'BEGIN {v = int((n * t) / e); if (v < 10000) v = 10000; print v}')
+    iters=$scaled
+  done
+  print "$iters"
+}
+
+median_ms() {
+  local -a vals=("$@")
+  local -a sorted
+  local idx
+  sorted=("${(@on)vals}")
+  idx=$(( (${#sorted[@]} + 1) / 2 ))
+  print "${sorted[$idx]}"
+}
+
+run_suite() {
+  local mode=$1
+  local iters elapsed med
+  local -a samples
+  local i
+
+  iters=$(calibrate_iters "$mode")
+  run_workload "$mode" "$iters" >/dev/null 2>&1
+
+  for (( i = 1; i <= RUNS; i++ )); do
+    elapsed=$(measure_ms "$mode" "$iters")
+    samples+=("$elapsed")
+  done
+
+  med=$(median_ms "${samples[@]}")
+  print "$mode $iters $med"
+}
+
+print_header() {
+  (( QUIET == 1 )) && return 0
+  print "CPU Bench"
+  print "Runs: ${RUNS}  Target: ${TARGET_MS}ms"
+}
+
+main() {
+  parse_options "$@"
+  print_header
+
+  local int_mode int_iters int_ms
+  local float_mode float_iters float_ms
+  local int_score float_score composite
+
+  read -r int_mode int_iters int_ms <<< "$(run_suite int)"
+  read -r float_mode float_iters float_ms <<< "$(run_suite float)"
+
+  int_score=$(awk -v n="$int_iters" -v ms="$int_ms" 'BEGIN {printf "%.0f", (n * 1000.0) / ms}')
+  float_score=$(awk -v n="$float_iters" -v ms="$float_ms" 'BEGIN {printf "%.0f", (n * 1000.0) / ms}')
+  composite=$(awk -v a="$int_score" -v b="$float_score" 'BEGIN {printf "%.0f", sqrt(a*b)}')
+
+  if (( QUIET == 0 )); then
+    print "Integer: iters=${int_iters} median=${int_ms}ms score=${int_score}"
+    print "Float:   iters=${float_iters} median=${float_ms}ms score=${float_score}"
+  fi
+  print "CPU_SCORE=${composite}"
+}
+
+main "$@"
