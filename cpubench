@@ -1,5 +1,10 @@
 #!/bin/zsh
 
+: "${OHM_PATH:?OHM_PATH is not set. Source init.zsh first.}"; source "${OHM_PATH}/init_lib.zsh" || { print -u2 -- "Failed to source ${OHM_PATH}/init_lib.zsh"; exit 1; }
+
+uses crt_lib.zsh
+uses spinner_lib.zsh
+
 set -u
 
 zmodload zsh/datetime 2>/dev/null || true
@@ -233,6 +238,9 @@ pretty_print() {
 main() {
   parse_options "$@"
 
+  CursorOff
+  SpinnerStart "Thinking..."
+
   local int_mode int_iters int_ms
   local float_mode float_iters float_ms
   local int_score float_score composite
@@ -248,11 +256,13 @@ main() {
   float_score_h=$(format_human_score "$float_score")
   composite_h=$(format_human_score "$composite")
 
+  SpinnerStop
   if (( QUIET == 0 )); then
     pretty_print "$RUNS" "$TARGET_MS" "$int_iters" "$int_ms" "$int_score_h" "$float_iters" "$float_ms" "$float_score_h" "$composite_h"
   else
     print "CPU_SCORE=${composite}"
   fi
+  CursorOn
 }
 
 main "$@"

@@ -1,4 +1,5 @@
 #!/bin/zsh
+# shellcheck disable=SC2155,SC2154
 
 : "${OHM_PATH:?OHM_PATH is not set. Source init.zsh first.}"; source "${OHM_PATH}/init_lib.zsh" || { print -u2 -- "Failed to source ${OHM_PATH}/init_lib.zsh"; exit 1; }
 
@@ -429,7 +430,6 @@ draw_bar() {
 
 pretty_print() {
 	CursorOff
-
   SpinnerStart "Thinking..."
 
 	local hostname="$(get_computer_name)"
