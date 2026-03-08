@@ -41,11 +41,20 @@ get_cpu_model() {
 
 get_linux_os() {
   local pretty_name
+  local hostctl_name
   local os_name
   local os_version
   local os_version_id
 
   [[ "$(uname)" == "Linux" ]] || { echo "This function only works on Linux."; return 1; }
+
+  if command -v hostnamectl &>/dev/null; then
+    hostctl_name=$(hostnamectl 2>/dev/null | awk -F': +' '/Operating System/{print $2; exit}')
+    if [[ -n "$hostctl_name" ]]; then
+      echo "$hostctl_name"
+      return 0
+    fi
+  fi
 
   if [[ -r "/etc/os-release" ]]; then
     pretty_name=$(awk -F= '/^PRETTY_NAME=/{gsub(/^"|"$/, "", $2); print $2; exit}' /etc/os-release)
