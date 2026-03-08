@@ -59,7 +59,7 @@ ohm/
 
 ```zsh
 # Clone the repository
-git clone <repo-url> ~/ohm
+git clone https://github.com/juliandicks/ohm.git ~/ohm
 cd ~/ohm
 
 # Install dependencies and create local config templates
