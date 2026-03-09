@@ -106,6 +106,11 @@ ClrScr
 WriteXY 10 5 "Welcome to the future of terminal UIs"
 ```
 
+## 🛠️ Development
+
+- Developer guide: [turbo_zsh/DEVELOPMENT.md](turbo_zsh/DEVELOPMENT.md)
+- Function docs use `ZDOC v1` tags for parsing: `#@fn`, `#@brief`, `#@args`, `#@ret`.
+
 ## 📚 API Reference
 
 ### crt_lib.zsh — Console/Screen Control

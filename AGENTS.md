@@ -34,3 +34,22 @@
 - Version info: `source ./init.zsh && ohm_version`
 - Syntax check a script: `zsh -n path/to/file.zsh`
 
+## Function Documentation Standard (ZDOC v1)
+- Public functions in `turbo_zsh/*.zsh` must include `#@` docblocks immediately above each function.
+- Required tags: `#@fn`, `#@brief`, `#@args`, `#@ret`.
+- Optional tags: `#@example`, `#@notes`, `#@since`, `#@deprecated`.
+- Keep tags single-line and grep-friendly for manual generation.
+- Internal underscore-prefixed helpers may omit docblocks.
+- Full reference: `turbo_zsh/DEVELOPMENT.md`.
+
+## Module Documentation Standard (ZDOC v1)
+- Each `turbo_zsh/*.zsh` module should declare a top-of-file `#@module` header block.
+- Required module tags: `#@module`, `#@brief`, `#@public`.
+- Optional module tags: `#@depends`, `#@notes`, `#@since`, `#@deprecated`.
+- Module headers should appear after shebang/shellcheck lines and before code.
+
+## Function Style & Visibility Checks
+- Public function names must use PascalCase (for example `DrawDialogBox`, `PadRight`).
+- Public functions must be documented with `#@fn` blocks.
+- Private/internal functions must be prefixed with `_` (underscore), including helper utilities.
+- Underscore-prefixed functions are considered internal and may omit public docs.
