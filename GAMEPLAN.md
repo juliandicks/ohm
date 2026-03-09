@@ -257,7 +257,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run tests
-        run: zsh tests/run-tests.zsh
+        run: zsh tests/run-tests.sh
 ```
 
 ---
