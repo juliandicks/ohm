@@ -21,11 +21,11 @@ get_computer_name() {
 get_cpu_model() {
   local cpu_model
 
-  if isMac; then
+  if IsMac; then
     if command -v sysctl &>/dev/null; then
       cpu_model=$(sysctl -n machdep.cpu.brand_string 2>/dev/null)
     fi
-  elif isLinux; then
+  elif IsLinux; then
     if command -v lscpu &>/dev/null; then
       cpu_model=$(lscpu 2>/dev/null | awk -F: '/Model name/{sub(/^[ \t]+/, "", $2); print $2; exit}')
     elif [[ -r /proc/cpuinfo ]]; then
@@ -148,9 +148,9 @@ get_macos_info() {
 }
 
 get_os() {
-	if isMac; then
+	if IsMac; then
 		get_macos_info
-	elif isLinux; then
+	elif IsLinux; then
 		get_linux_os
 	else
 		echo "Unknown"
@@ -158,9 +158,9 @@ get_os() {
 }
 
 get_core_counts() {
-	if isMac; then
+	if IsMac; then
 		get_mac_core_counts
-	elif isLinux; then
+	elif IsLinux; then
 		get_ubuntu_core_counts
 	else
 		echo "Unknown"
@@ -292,9 +292,9 @@ get_ubuntu_memory() {
 }
 
 get_memory() {
-	if isMac; then
+	if IsMac; then
 		get_mac_memory
-	elif isLinux; then
+	elif IsLinux; then
 		get_ubuntu_memory
 	else
 		echo "0 1"
@@ -373,12 +373,12 @@ get_root_disk_space() {
   local used_percentage
   local percent_token
 
-  if isMac; then
+  if IsMac; then
     # macOS: Get disk usage using df
     if command -v df &>/dev/null; then
       disk_info=$(df -h / 2>/dev/null | awk 'NR==2 {print $3, $2, $5}')  # Extract "Used", "Total", "Percentage Used"
     fi
-  elif isLinux; then
+  elif IsLinux; then
     # Linux: Get disk usage using df
     if command -v df &>/dev/null; then
       disk_info=$(df -h --output=used,size,pcent / 2>/dev/null | tail -n 1)  # Extract "Used", "Total", "Percentage Used"

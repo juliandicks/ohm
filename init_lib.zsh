@@ -1,7 +1,7 @@
 # shellcheck disable=SC2034,SC2086,SC1090,SC2120,SC2154
 
 source ${OHM_PATH}/turbo_zsh/system_lib.zsh
-add_uses_path "${OHM_PATH}"
+AddSearchPathToUses "${OHM_PATH}"
 
 ohm_prefix() {
   printf "\e[91mΩ\e[0m %s" "${1}"

@@ -29,7 +29,7 @@ ports=()
 
 # --- Helper Functions ---
 get_listening_ports() {
-  if isMac; then
+  if IsMac; then
     netstat -anp tcp | grep LISTEN | awk '{print $4}' | awk -F'.' '{print $NF}' | sort -nu
   else
     netstat -tln | grep LISTEN | awk '{print $4}' | awk -F':' '{print $NF}' | sort -nu

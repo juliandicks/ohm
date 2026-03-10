@@ -103,28 +103,28 @@ config_init() {
 }
 
 doctor() {
-  local failed=0
+  local Failed=0
   local warned=0
   local zshrc="${HOME}/.zshrc"
   local hook="source ${OHM_PATH}/init.zsh"
 
   info "Doctor"
 
-  command -v zsh >/dev/null 2>&1 && ok "zsh available" || { err "zsh missing"; ((failed++)); }
-  command -v git >/dev/null 2>&1 && ok "git available" || { err "git missing"; ((failed++)); }
+  command -v zsh >/dev/null 2>&1 && ok "zsh available" || { err "zsh missing"; ((Failed++)); }
+  command -v git >/dev/null 2>&1 && ok "git available" || { err "git missing"; ((Failed++)); }
 
   if [[ -f "${OHM_PATH}/init.zsh" ]]; then
     ok "init.zsh present"
   else
     err "Missing init.zsh"
-    ((failed++))
+    ((Failed++))
   fi
 
   if [[ -d "${OHM_PATH}/menu_zsh" ]]; then
     ok "menu_zsh present"
   else
     err "menu_zsh missing (run ./setup)"
-    ((failed++))
+    ((Failed++))
   fi
 
   local menu_launcher="${OHM_PATH}/menu_zsh/m.sh"
@@ -137,20 +137,20 @@ doctor() {
         ok "Fixed menu launcher permissions"
       else
         err "Unable to set execute permission on $menu_launcher"
-        ((failed++))
+        ((Failed++))
       fi
       ((warned++))
     fi
   else
     err "Missing menu launcher: $menu_launcher"
-    ((failed++))
+    ((Failed++))
   fi
 
   if [[ -d "${OHM_PATH}/turbo_zsh" ]]; then
     ok "turbo_zsh present"
   else
     err "turbo_zsh missing (run ./setup)"
-    ((failed++))
+    ((Failed++))
   fi
 
   if [[ -f "$(user_menu_file)" ]]; then
@@ -175,12 +175,12 @@ doctor() {
     ((warned++))
   fi
 
-  if (( failed > 0 )); then
-    err "Doctor found ${failed} failure(s), ${warned} warning(s)"
+  if (( Failed > 0 )); then
+    err "Doctor found ${Failed} failure(s), ${warned} warning(s)"
     return 1
   fi
 
-  info "Doctor passed (${warned} warning(s))"
+  info "Doctor Passed (${warned} warning(s))"
 }
 
 show_help() {
