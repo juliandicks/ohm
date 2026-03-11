@@ -4,12 +4,13 @@
 # services - List and display status of user-defined services
 # Usage: see show_help function or run with -h
 
-# --- Imports and Environment ---
-: "${OHM_PATH:?OHM_PATH is not set. Source init.zsh first.}"; source "${OHM_PATH}/init_lib.zsh" || { print -u2 -- "Failed to source ${OHM_PATH}/init_lib.zsh"; exit 1; }
+[[ -n "$TURBO_PATH" ]] || { print "🛑Script aborted. TURBO_ZSH missing."; exit 250; }
 
 uses alerts_lib.zsh
 uses string_lib.zsh
 uses crt_lib.zsh
+
+uses ohm_lib.zsh
 
 source $( env_user_host ) || {
   error_bar "Missing $(env_user_host)"

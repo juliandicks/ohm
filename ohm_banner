@@ -1,3 +1,4 @@
+#!/bin/zsh
 # https://patorjk.com/software/taag/?p=display&f=Slant&t=ohm&x=echoCommands
 
 printf "\e[38;5;196m         ";  printf "\e[38;5;202m__   ";   printf "         \e[0m\n";

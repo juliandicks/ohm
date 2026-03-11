@@ -1,7 +1,7 @@
 #!/bin/zsh
 # shellcheck disable=SC2154,SC2086
 
-: "${OHM_PATH:?OHM_PATH is not set. Source init.zsh first.}"; source "${OHM_PATH}/init_lib.zsh" || { print -u2 -- "Failed to source ${OHM_PATH}/init_lib.zsh"; exit 1; }
+[[ -n "$TURBO_PATH" ]] || { print "🛑Script aborted. TURBO_ZSH missing."; exit 250; }
 
 uses alerts_lib.zsh
 

@@ -27,7 +27,7 @@ Ohm is a terminal user interface framework that brings back the nostalgic charm 
 ohm/
 ├── init.zsh              # Main entry point - source this in your .zshrc
 ├── init_lib.zsh          # Core initialization utilities
-├── banner.zsh            # ASCII art banner
+├── ohm_banner            # ASCII art banner
 │
 ├── turbo_zsh/            # 🎯 Core UI Library (Turbo™)
 │   ├── system_lib.zsh    # Module loading system (uses)

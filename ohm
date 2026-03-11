@@ -1,6 +1,8 @@
 #!/bin/zsh
 # shellcheck disable=SC2154,SC2086
 
+[[ -n "$TURBO_PATH" ]] || { print "🛑Script aborted. TURBO_ZSH missing."; exit 250; }
+
 set -u
 
 OHM_PATH=${0:A:h}
@@ -172,6 +174,16 @@ doctor() {
   else
     warn "shell hook missing from ~/.zshrc"
     echo "       Add: $hook"
+    ((warned++))
+  fi
+
+  local zshenv="${HOME}/.zshenv"
+  local ohm_hook="source ${OHM_PATH}/init_env.zsh"
+  if [[ -f "$zshenv" ]] && grep -Fq "$ohm_hook" "$zshenv"; then
+    ok "ohm env hook present in ~/.zshenv"
+  else
+    warn "ohm env hook missing from ~/.zshenv"
+    echo "       Add: $ohm_hook"
     ((warned++))
   fi
 

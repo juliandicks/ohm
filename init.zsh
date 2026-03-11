@@ -1,7 +1,5 @@
 # shellcheck disable=SC2034,SC2086,SC1090,SC2120,SC2154
 
-export OHM_PATH=${0:A:h}
-
 source ${OHM_PATH}/version.zsh
 source ${OHM_PATH}/init_lib.zsh
 

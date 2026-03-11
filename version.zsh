@@ -38,7 +38,7 @@ ohm_check_updates() {
 
 # Display version information
 ohm_version() {
-  source ${OHM_PATH}/banner.zsh
+  source ${OHM_PATH}/ohm_banner
   echo ""
   echo "  Version: ${OHM_VERSION} (${OHM_VERSION_NAME})"
   echo "     Date: ${OHM_VERSION_DATE}"
