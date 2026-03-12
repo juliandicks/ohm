@@ -1,4 +1,5 @@
 #!/bin/zsh
+# shellcheck disable=SC2051,SC2079,SC2324,SC2128
 
 [[ -n "$TURBO_PATH" ]] || { print "🛑Script aborted. TURBO_ZSH missing."; exit 250; }
 
@@ -11,6 +12,7 @@ typeset -gi _cpu_prev_idle=-1
 # Function to get CPU usage on Linux
 get_cpu_usage_linux() {
     local cpu user nice system idle iowait irq softirq steal guest guest_nice
+    # shellcheck disable=SC2034
     if ! read -r cpu user nice system idle iowait irq softirq steal guest guest_nice < /proc/stat; then
         echo "0"
         return
@@ -73,23 +75,10 @@ get_cpu_usage() {
     esac
 }
 
-# Function to display CPU usage with a green bar
-display_usage_bar() {
-    local usage=$1
-    local bar_length=50
-    local filled=$((usage * bar_length / 100))
-
-    # Build the bar
-    local bar=$(printf "%${filled}s" | tr ' ' '#')
-    local empty=$(printf "%$((bar_length - filled))s")
-
-    # Print the bar
-    printf "[\e[32m%s\e[0m%s] %3d%%\n" "${bar}" "${empty}" "$usage"
-}
-
-typeset -A charMap
+# Theme definitions
+typeset -A brailleMap blockMap dotMap
 # shellcheck disable=SC2190,SC2034
-charMap=(
+brailleMap=(
   "00" "⠀"
   "01" "⢀"
   "02" "⢠"
@@ -117,17 +106,135 @@ charMap=(
   "44" "⣿"
 )
 
+# shellcheck disable=SC2190,SC2034
+blockMap=(
+  "0" " "
+  "1" "▁"
+  "2" "▂"
+  "3" "▃"
+  "4" "▄"
+  "5" "▅"
+  "6" "▆"
+  "7" "▇"
+  "8" "█"
+)
+
+# shellcheck disable=SC2190,SC2034
+dotMap=(
+  "0" " "
+  "1" "⚬"
+  "2" "○"
+  "3" "◔"
+  "4" "◑"
+  "5" "◕"
+  "6" "●"
+)
+
+show_help() {
+  cat <<EOF
+Usage: cpu_graph [OPTIONS]
+
+Display a real-time CPU usage graph in the terminal.
+
+Options:
+  -w, --width <num>      Graph width in characters (default: 32, range: 16-128)
+  -t, --theme <name>     Display theme: braille, block, dot (default: braille)
+  -h, --help             Show this help message
+
+Themes:
+  braille    Compact dual-bar braille characters (5 levels)
+  block      Block elements with 9 levels (space to full block)
+  dot        Circle/dot density representation (9 levels)
+
+Press any key to exit the graph display.
+
+Examples:
+  cpu_graph                    # Default: 32 width, braille theme
+  cpu_graph -w 64              # 64 character width
+  cpu_graph -t block           # Use block theme
+  cpu_graph -w 80 -t dot       # 80 width with dot theme
+EOF
+}
+
 main() {
   emulate -L zsh
   setopt localoptions no_xtrace no_verbose typesetsilent
 
-  # Parse history length parameter (default 32, range 32-128)
-  local history_len=${1:-32}
-  if (( history_len < 32 )); then
-    history_len=32
-  elif (( history_len > 128 )); then
-    history_len=128
+  # Default values
+  local width=32
+  local theme="braille"
+  local charMap
+  local levels=5
+  local chars_per_sample=2
+
+  # Parse command line arguments
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      -h|--help)
+        show_help
+        return 0
+        ;;
+      -w|--width)
+        if [[ -z $2 || $2 == -* ]]; then
+          print "Error: --width requires a numeric argument" >&2
+          return 1
+        fi
+        width=$2
+        shift 2
+        ;;
+      -t|--theme)
+        if [[ -z $2 || $2 == -* ]]; then
+          print "Error: --theme requires an argument (braille, block, or dot)" >&2
+          return 1
+        fi
+        theme=$2
+        shift 2
+        ;;
+      *)
+        # Backward compatibility: numeric first argument sets width
+        if [[ $1 =~ ^[0-9]+$ ]] && [[ $# -eq 1 ]]; then
+          width=$1
+          shift
+        else
+          print "Error: Unknown option: $1" >&2
+          print "Use --help for usage information" >&2
+          return 1
+        fi
+        ;;
+    esac
+  done
+
+  # Validate width
+  if (( width < 16 )); then
+    width=16
+  elif (( width > 128 )); then
+    width=128
   fi
+
+  # Select theme and set parameters
+  case $theme in
+    braille)
+      charMap=brailleMap
+      levels=5
+      chars_per_sample=2
+      ;;
+    block)
+      charMap=blockMap
+      levels=9
+      chars_per_sample=1
+      ;;
+    dot)
+      charMap=dotMap
+      levels=7
+      chars_per_sample=1
+      ;;
+    *)
+      print "Error: Unknown theme '$theme'. Valid themes: braille, block, dot" >&2
+      return 1
+      ;;
+  esac
+
+  local history_len=$width
 
   # Initialize history string with zeros
   local history=$(printf '0%.0s' {1..$history_len})
@@ -143,18 +250,28 @@ main() {
 
   while true; do
       local usage=$(get_cpu_usage)
-      local mapped=$(( usage * 5 / 101 ))
-      # shellcheck disable=SC2324
+      local mapped=$(( usage * levels / 101 ))
       history+=$mapped
       history=${history[2,-1]}
 
       local result=""
-      for ((i=1; i<=len; i+=2)); do
-        pair=${history[i, i+1]}     # Zsh slice: 2 chars
-        result+=$charMap[$pair]         # append mapped char
-      done
+      if [[ $chars_per_sample -eq 2 ]]; then
+        # Braille: 2 samples per character
+        for ((i=1; i<=len; i+=2)); do
+          pair=${history[i, i+1]}
+          # shellcheck disable=SC2298,SC2296
+          result+=${${(P)charMap}[$pair]}
+        done
+      else
+        # Block/Dot: 1 sample per character
+        for ((i=1; i<=len; i++)); do
+          pair=${history[i]}
+          # shellcheck disable=SC1087,SC2296,SC2298
+          result+=${${(P)charMap}[$pair]}
+        done
+      fi
 
-      printf "[\e[32m%s\e[0m] %3d%%\r" "${result}" "$usage"
+      printf " [\e[32m%s\e[0m] %3d%%\r" "${result}" "$usage"
 
       # Check for key press with 1 second timeout (suppress output)
       if read -t 1 -k 1 -s 2>/dev/null; then
