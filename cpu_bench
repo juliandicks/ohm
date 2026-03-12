@@ -15,7 +15,7 @@ QUIET=0
 
 show_help() {
   cat <<EOF
-Usage: cpubench [OPTIONS]
+Usage: cpu_bench [OPTIONS]
 
 Simple CPU benchmark for cross-machine comparison (no install required).
 
