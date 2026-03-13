@@ -76,9 +76,10 @@ get_cpu_usage() {
 }
 
 # Theme definitions
-typeset -A brailleMap blockMap dotMap
+typeset -A dotsMap blockMap pieMap
+
 # shellcheck disable=SC2190,SC2034
-brailleMap=(
+dotsMap=(
   "00" "⠀"
   "01" "⢀"
   "02" "⢠"
@@ -120,7 +121,7 @@ blockMap=(
 )
 
 # shellcheck disable=SC2190,SC2034
-dotMap=(
+pieMap=(
   "0" " "
   "1" "⚬"
   "2" "○"
@@ -138,21 +139,21 @@ Display a real-time CPU usage graph in the terminal.
 
 Options:
   -w, --width <num>      Graph width in characters (default: 32, range: 16-128)
-  -t, --theme <name>     Display theme: braille, block, dot (default: braille)
+  -t, --theme <name>     Display theme: dots, block, pie (default: dots)
   -h, --help             Show this help message
 
 Themes:
-  braille    Compact dual-bar braille characters (5 levels)
-  block      Block elements with 9 levels (space to full block)
-  dot        Circle/dot density representation (9 levels)
+  dots    Compact dual-bar dots characters (5 levels)
+  block   Block elements with 9 levels (space to full block)
+  pie     Circle/Pie density representation (9 levels)
 
 Press any key to exit the graph display.
 
 Examples:
-  cpu_graph                    # Default: 32 width, braille theme
+  cpu_graph                    # Default: 32 width, dots theme
   cpu_graph -w 64              # 64 character width
   cpu_graph -t block           # Use block theme
-  cpu_graph -w 80 -t dot       # 80 width with dot theme
+  cpu_graph -w 80 -t pie       # 80 width with pie theme
 EOF
 }
 
@@ -162,7 +163,7 @@ main() {
 
   # Default values
   local width=32
-  local theme="braille"
+  local theme="dots"
   local charMap
   local levels=5
   local chars_per_sample=2
@@ -184,7 +185,7 @@ main() {
         ;;
       -t|--theme)
         if [[ -z $2 || $2 == -* ]]; then
-          print "Error: --theme requires an argument (braille, block, or dot)" >&2
+          print "Error: --theme requires an argument (dots, block, or pie)" >&2
           return 1
         fi
         theme=$2
@@ -213,8 +214,8 @@ main() {
 
   # Select theme and set parameters
   case $theme in
-    braille)
-      charMap=brailleMap
+    dots)
+      charMap=dotsMap
       levels=5
       chars_per_sample=2
       ;;
@@ -223,13 +224,13 @@ main() {
       levels=9
       chars_per_sample=1
       ;;
-    dot)
-      charMap=dotMap
+    pie)
+      charMap=pieMap
       levels=7
       chars_per_sample=1
       ;;
     *)
-      print "Error: Unknown theme '$theme'. Valid themes: braille, block, dot" >&2
+      print "Error: Unknown theme '$theme'. Valid themes: dots, block, pie" >&2
       return 1
       ;;
   esac
@@ -256,14 +257,14 @@ main() {
 
       local result=""
       if [[ $chars_per_sample -eq 2 ]]; then
-        # Braille: 2 samples per character
+        # dots: 2 samples per character
         for ((i=1; i<=len; i+=2)); do
           pair=${history[i, i+1]}
           # shellcheck disable=SC2298,SC2296
           result+=${${(P)charMap}[$pair]}
         done
       else
-        # Block/Dot: 1 sample per character
+        # Block/Pie: 1 sample per character
         for ((i=1; i<=len; i++)); do
           pair=${history[i]}
           # shellcheck disable=SC1087,SC2296,SC2298
