@@ -100,7 +100,7 @@ uses crt_lib.zsh
 uses alerts_lib.zsh
 
 # Now you have access to all turbo_zsh functions!
-info_bar "Hello from Ohm!"
+InfoBar "Hello from Ohm!"
 SetColor Yellow Blue
 ClrScr
 WriteXY 10 5 "Welcome to the future of terminal UIs"
@@ -165,11 +165,11 @@ SpinnerReadKey "Press any key to continue "
 ### alerts_lib.zsh — Notification Bars
 
 ```zsh
-info_bar "This is informational"      # Blue bar with ℹ️
-warning_bar "This is a warning"       # Yellow bar with ⚠️
-error_bar "This is an error"          # Red bar
-security_bar "Security alert!"        # Red bar with 🚓
-sudo_prompt                           # Warn before sudo commands
+InfoBar "This is informational"       # Blue bar with ℹ️
+WarningBar "This is a warning"        # Yellow bar with ⚠️
+ErrorBar "This is an error"           # Red bar
+SecurityBar "Security alert!"         # Red bar with 🚓
+SudoPrompt                            # Warn before sudo commands
 ```
 
 ### string_lib.zsh — String Utilities

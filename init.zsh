@@ -3,9 +3,9 @@
 # source ${OHM_PATH}/version.zsh
 uses ohm_lib.zsh
 
-add_path "$OHM_PATH"
+AddPath "$OHM_PATH"
 
 export OHM_USER_PATH=${0:A:h}/user
 
-source_if_exists ${OHM_USER_PATH}/init_${USER}
-source_if_exists ${OHM_USER_PATH}/init_${USER}_${HOST%%.*}
+SourceIfExists ${OHM_USER_PATH}/init_${USER}
+SourceIfExists ${OHM_USER_PATH}/init_${USER}_${HOST%%.*}

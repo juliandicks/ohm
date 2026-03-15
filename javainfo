@@ -5,7 +5,7 @@
 
 uses alerts_lib.zsh
 
-exit_if_columns_less_than 80
+ExitIfColumnsLessThan 80
 
 uses crt_lib.zsh
 uses math_lib.zsh

@@ -13,12 +13,12 @@ uses crt_lib.zsh
 uses ohm_lib.zsh
 
 source $( env_user_host ) || {
-  error_bar "Missing $(env_user_host)"
+  ErrorBar "Missing $(env_user_host)"
   exit 2
 }
 
 typeset -p SERVICE_LIST &>/dev/null || {
-  error_bar "Please declare SERVICE_LIST in your environment file"
+  ErrorBar "Please declare SERVICE_LIST in your environment file"
   exit 1
 }
 
