@@ -6,8 +6,8 @@
 uses crt_lib.zsh
 
 # Stateful Linux sampler data for diff-based usage.
-typeset -gi _cpu_prev_total=-1
-typeset -gi _cpu_prev_idle=-1
+global -i _cpu_prev_total=-1
+global -i _cpu_prev_idle=-1
 
 # Function to get CPU usage on Linux
 get_cpu_usage_linux() {
