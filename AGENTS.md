@@ -53,3 +53,12 @@
 - Public functions must be documented with `#@fn` blocks.
 - Private/internal functions must be prefixed with `_` (underscore), including helper utilities.
 - Underscore-prefixed functions are considered internal and may omit public docs.
+
+## File Naming Conventions
+- **Executable scripts**: No file extension, must have shebang (`#!/bin/zsh`) at top of file.
+  - Examples: `m`, `sysinfo`, `tests`, `extract_zdoc`
+  - Used for: demos, tests, utilities, standalone scripts
+- **Sourced libraries**: Must have `.zsh` extension, no shebang required.
+  - Examples: `crt_lib.zsh`, `app_lib.zsh`, `init.zsh`, `fire.zsh`
+  - Used for: function libraries, init files, code meant to be sourced
+- Rationale: Clear distinction between executables (run directly) and libraries (sourced into shell).
