@@ -14,7 +14,6 @@ A roadmap for improving the structure, maintainability, and usability of the Ohm
 - Consistent load-guard pattern (`(( $+functions[*_loaded] ))`)
 
 ### Areas for Improvement ⚠️
-- Mixed file extensions (`.zsh`, `.sh`) with inconsistent shebang usage
 - No centralized documentation for all functions
 - Missing test coverage
 - No versioning or changelog
@@ -24,24 +23,6 @@ A roadmap for improving the structure, maintainability, and usability of the Ohm
 ---
 
 ## 🎯 Phase 1: Foundation & Consistency (1-2 weeks)
-
-### 1.1 Standardize File Naming
-**Goal:** Consistent naming conventions across the project.
-
-```
-Current → Proposed
-───────────────────────────────────────
-menu_zsh/m.sh          → menu_zsh/menu.zsh
-menu_zsh/init.sh       → menu_zsh/init.zsh
-menu_zsh/about.sh      → menu_zsh/about.zsh
-menu_zsh/samples/*.sh  → menu_zsh/demos/*.zsh
-```
-
-**Action Items:**
-- [ ] Rename all `.sh` files to `.zsh` in Zsh-specific directories
-- [ ] Update all `source` and reference paths
-- [ ] Ensure all files have `#!/bin/zsh` shebang
-- [ ] Create `demos/` folder (rename from `samples/`)
 
 ### 1.2 Add Load Guards Everywhere
 **Goal:** Prevent double-loading of any module.
