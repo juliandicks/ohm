@@ -8,6 +8,7 @@ uses spinner_lib.zsh
 set -u
 
 zmodload zsh/datetime 2>/dev/null || true
+zmodload zsh/mathfunc 2>/dev/null || true
 
 RUNS=5
 TARGET_MS=700
@@ -125,7 +126,8 @@ calibrate_iters() {
   for i in 1 2 3; do
     elapsed=$(measure_ms "$mode" "$iters")
     (( elapsed <= 0 )) && elapsed=1
-    scaled=$(awk -v n="$iters" -v t="$TARGET_MS" -v e="$elapsed" 'BEGIN {v = int((n * t) / e); if (v < 10000) v = 10000; print v}')
+    integer scaled=$(( (iters * TARGET_MS) / elapsed ))
+    (( scaled < 10000 )) && scaled=10000
     iters=$scaled
   done
   print "$iters"
@@ -166,17 +168,24 @@ print_header() {
 
 format_human_score() {
   local value=$1
-  awk -v v="$value" 'BEGIN {
-    if (v >= 1000000000) printf "%.2fB", v / 1000000000.0;
-    else if (v >= 1000000) printf "%.2fM", v / 1000000.0;
-    else if (v >= 1000) printf "%.2fK", v / 1000.0;
-    else printf "%.0f", v;
-  }'
+  local value=$1
+  local result
+  
+  if (( value >= 1000000000 )); then
+    result=$(printf "%.2f" $((value / 1000000000.0)))B
+  elif (( value >= 1000000 )); then
+    result=$(printf "%.2f" $((value / 1000000.0)))M
+  elif (( value >= 1000 )); then
+    result=$(printf "%.2f" $((value / 1000.0)))K
+  else
+    result=$(printf "%.0f" $value)
+  fi
+  
+  print -n "$result"
 }
 
 format_ms_1dp() {
-  local value=$1
-  awk -v v="$value" 'BEGIN {printf "%.1f", v}'
+  printf "%.1f" "$1"
 }
 
 fill_char() {
@@ -249,9 +258,9 @@ main() {
   read -r int_mode int_iters int_ms <<< "$(run_suite int)"
   read -r float_mode float_iters float_ms <<< "$(run_suite float)"
 
-  int_score=$(awk -v n="$int_iters" -v ms="$int_ms" 'BEGIN {printf "%.0f", (n * 1000.0) / ms}')
-  float_score=$(awk -v n="$float_iters" -v ms="$float_ms" 'BEGIN {printf "%.0f", (n * 1000.0) / ms}')
-  composite=$(awk -v a="$int_score" -v b="$float_score" 'BEGIN {printf "%.0f", sqrt(a*b)}')
+  int_score=$(( (int_iters * 1000) / int_ms ))
+  float_score=$(( (float_iters * 1000) / float_ms ))
+  composite=$(printf "%.0f" $(( sqrt(int_score * float_score) )))
   int_score_h=$(format_human_score "$int_score")
   float_score_h=$(format_human_score "$float_score")
   composite_h=$(format_human_score "$composite")
