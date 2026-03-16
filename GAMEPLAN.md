@@ -22,36 +22,6 @@ A roadmap for improving the structure, maintainability, and usability of the Ohm
 
 ---
 
-## 🎯 Phase 1: Foundation & Consistency (1-2 weeks)
-
-### 1.2 Add Load Guards Everywhere
-**Goal:** Prevent double-loading of any module.
-
-```zsh
-# Standard pattern for ALL library files:
-(( $+functions[<libname>_loaded] )) && return
-<libname>_loaded() { :; }
-```
-
-**Action Items:**
-- [ ] Audit all files for load guards
-- [ ] Add missing guards to: `init_lib.zsh`, `window_lib.zsh`, etc.
-
-### 1.3 Create Central Version File
-
-```zsh
-# version.zsh
-export OHM_VERSION="0.1.0"
-export OHM_VERSION_DATE="2026-01-30"
-```
-
-**Action Items:**
-- [ ] Create `version.zsh`
-- [ ] Source in `init.zsh`
-- [ ] Add `ohm_version` command to display version info
-
----
-
 ## 🏗️ Phase 2: Structure & Organization (2-3 weeks)
 
 ### 2.1 Reorganize Directory Structure

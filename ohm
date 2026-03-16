@@ -129,7 +129,7 @@ doctor() {
     ((Failed++))
   fi
 
-  local menu_launcher="${OHM_PATH}/menu_zsh/m.sh"
+  local menu_launcher="${OHM_PATH}/menu_zsh/m"
   if [[ -f "$menu_launcher" ]]; then
     if [[ -x "$menu_launcher" ]]; then
       ok "menu launcher executable"
