@@ -1,0 +1,173 @@
+#!/bin/zsh
+# shellcheck disable=SC2034,SC2154,SC2086
+
+[[ -n "$TURBO_PATH" ]] || { print "Script aborted. TURBO_ZSH missing."; exit 250; }
+
+uses crt_lib.zsh
+uses keys_lib.zsh
+uses spinner_lib.zsh
+uses string_lib.zsh
+
+config_spinner() {
+  SpinnerList
+  local total=${#SPINNER_LIST[@]}
+  local selected=1
+  local scroll_offset=0
+  local spinner_frame=1
+  local frame_tick=0
+  local confirmed=0
+
+  # Find index of current default
+  for (( i = 1; i <= total; i++ )); do
+    [[ "${SPINNER_LIST[$i]}" == "$SPINNER_DEFAULT" ]] && { selected=$i; break; }
+  done
+
+  # Layout calculations
+  local rows=$(GetRows)
+  local cols=$(GetCols)
+  local visible=$(( rows - 6 ))
+  (( visible > total )) && visible=$total
+  (( visible < 5 )) && { print "Terminal too small (need at least 11 rows)."; return 1; }
+
+  local box_w=44
+  local box_x=3
+  local box_y=2
+  local box_h=$(( visible + 3 ))
+  local list_x=$(( box_x + 1 ))
+  local list_y=$(( box_y + 1 ))
+
+  # Adjust scroll to keep selection visible
+  _cfg_adjust_scroll() {
+    (( selected - 1 < scroll_offset )) && scroll_offset=$(( selected - 1 ))
+    (( selected > scroll_offset + visible )) && scroll_offset=$(( selected - visible ))
+  }
+
+  # Draw static screen elements (called once)
+  _cfg_draw_chrome() {
+    SetColor BrightWhite Blue
+    ClrScr
+
+    # Title bar
+    SetColor Black BrightWhite
+    GotoXY 1 1; ClrEol
+    Write "$(PadMiddle 'Configure Spinner' $cols)"
+
+    # Dialog box
+    SetColor BrightWhite Blue
+    DrawDialogBox $box_x $box_y $box_w $box_h "Spinners"
+
+    # Footer
+    SetColor White Black
+    GotoXY 1 $rows; ClrEol
+    Write " ↑↓ Navigate  Enter Accept  Esc Cancel"
+  }
+
+  CursorOff
+  _cfg_draw_chrome
+  _cfg_adjust_scroll
+
+  # Main loop
+  while true; do
+    # Draw visible spinner items
+    for (( vi = 1; vi <= visible; vi++ )); do
+      local idx=$(( scroll_offset + vi ))
+      local name="${SPINNER_LIST[$idx]}"
+      GotoXY $list_x $(( list_y + vi - 1 ))
+
+      if (( idx == selected )); then
+        SetColor BrightYellow Black
+        # Animate preview for selected spinner
+        local -a frames=("${(@P)name}")
+        local fcount=${#frames[@]}
+        local fidx=$(( (spinner_frame - 1) % fcount + 1 ))
+        printf " ▸ %-22s %s " "$name" "${frames[$fidx]}"
+      else
+        SetColor BrightWhite Blue
+        if [[ "$name" == "$SPINNER_DEFAULT" ]]; then
+          printf "   %-22s ● " "$name"
+        else
+          printf "   %-22s   " "$name"
+        fi
+      fi
+    done
+
+    # Scroll indicators
+    SetColor BrightWhite Blue
+    if (( scroll_offset > 0 )); then
+      WriteXY $(( box_x + box_w - 3 )) $list_y " ▲"
+    fi
+    if (( scroll_offset + visible < total )); then
+      WriteXY $(( box_x + box_w - 3 )) $(( list_y + visible - 1 )) " ▼"
+    fi
+
+    # Advance animation (every 2 ticks = 0.2s)
+    (( frame_tick++ ))
+    if (( frame_tick >= 2 )); then
+      (( spinner_frame++ ))
+      frame_tick=0
+    fi
+
+    # Read key with 0.1s timeout (allows animation)
+    local key=$(ReadLastKeyPress)
+    [[ -z "$key" ]] && continue
+
+    case "$key" in
+      "$KBD_UP_ARROW")
+        (( selected-- ))
+        (( selected < 1 )) && selected=$total
+        spinner_frame=1
+        _cfg_adjust_scroll
+        ;;
+      "$KBD_DN_ARROW")
+        (( selected++ ))
+        (( selected > total )) && selected=1
+        spinner_frame=1
+        _cfg_adjust_scroll
+        ;;
+      "$KBD_CR"|"$KBD_NL")
+        confirmed=1
+        break
+        ;;
+      "Esc")
+        break
+        ;;
+    esac
+  done
+
+  # Cleanup
+  ResetColor
+  CursorOn
+  ClrScr
+
+  if (( confirmed )); then
+    local chosen="${SPINNER_LIST[$selected]}"
+    SpinnerSetDefault "$chosen"
+    print "Default spinner set to: $chosen"
+  else
+    print "Cancelled."
+  fi
+}
+
+show_config_help() {
+  cat <<EOF
+Usage: config <command>
+
+Commands:
+  --spinner    Configure default spinner style
+  --help       Show this help
+EOF
+}
+
+case "${1:-}" in
+  --spinner|spinner)
+    config_spinner
+    ;;
+  --help|-h|help|"")
+    show_config_help
+    ;;
+  *)
+    print "Unknown config command: $1"
+    show_config_help
+    return 1
+    ;;
+esac
