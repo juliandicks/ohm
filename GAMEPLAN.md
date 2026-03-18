@@ -14,80 +14,18 @@ A roadmap for improving the structure, maintainability, and usability of the Ohm
 - Consistent load-guard pattern (`(( $+functions[*_loaded] ))`)
 
 ### Areas for Improvement ⚠️
-- No centralized documentation for all functions
-- Missing test coverage
-- No versioning or changelog
+- ~~Mixed file extensions (`.zsh`, `.sh`) with inconsistent shebang usage~~ ✅ Fixed
+- ~~No centralized documentation for all functions~~ ✅ ZDOC v1 + API_MANUAL.md
+- ~~Missing test coverage~~ ✅ test_lib.zsh + per-module tests
+- ~~No versioning or changelog~~ ✅ version.zsh exists
+- ~~Some code duplication between files~~ ✅ Consolidated into system_lib.zsh
 - User config mixed with core functionality
-- Some code duplication between files
 
 ---
 
-## 🏗️ Phase 2: Structure & Organization (2-3 weeks)
+## 🏗️ Phase 2: Structure & Organization
 
-### 2.1 Reorganize Directory Structure
-
-```
-ohm/
-├── README.md
-├── CHANGELOG.md
-├── LICENSE
-├── version.zsh
-│
-├── bin/                    # 🆕 Executable scripts/commands
-│   ├── m                   # Menu launcher (symlink or wrapper)
-│   ├── ohm-info           # System/version info
-│   └── ohm-demo           # Demo launcher
-│
-├── lib/                    # 🆕 Rename from turbo_zsh/
-│   ├── core/              # Foundation libraries
-│   │   ├── system.zsh     # Module loader (uses)
-│   │   ├── crt.zsh        # Console/screen
-│   │   └── keys.zsh       # Keyboard
-│   ├── ui/                # UI components
-│   │   ├── alerts.zsh
-│   │   ├── dialogs.zsh    # 🆕 Extract from crt
-│   │   ├── windows.zsh
-│   │   └── spinner.zsh
-│   └── util/              # Utilities
-│       ├── string.zsh
-│       └── math.zsh
-│
-├── menu/                   # Rename from menu_zsh/
-│   ├── engine.zsh         # Core menu logic
-│   ├── themes/            # 🆕 Menu color themes
-│   └── templates/         # Menu file templates
-│
-├── demos/                  # 🆕 Consolidated demos
-│   ├── life.zsh
-│   ├── fire.zsh
-│   ├── gallery/           # ASCII art samples
-│   └── README.md
-│
-├── user/                   # User configurations (gitignored)
-│   └── .gitkeep
-│
-├── examples/               # 🆕 Example scripts for users
-│   ├── simple-menu.mnu
-│   ├── custom-dialog.zsh
-│   └── spinner-demo.zsh
-│
-└── tests/                  # 🆕 Test suite
-    ├── run-tests.zsh
-    ├── test-crt.zsh
-    └── test-string.zsh
-```
-
-### 2.2 Create Backward Compatibility Layer
-
-During transition, maintain old paths:
-
-```zsh
-# turbo_zsh/system_lib.zsh (deprecated, keep for compatibility)
-echo "Warning: turbo_zsh is deprecated, use lib/ instead" >&2
-source ${0:A:h}/../lib/core/system.zsh
-```
-
-### 2.3 Separate User Config from Repo
+### 2.1 Separate User Config from Repo
 
 **Action Items:**
 - [ ] Add `user/` to `.gitignore`
@@ -120,83 +58,59 @@ docs/
     └── *.md
 ```
 
-### 3.2 Inline Documentation
+### 3.2 Inline Documentation ✅
 
-Standardize function documentation:
+Using ZDOC v1 format (see `turbo_zsh/DEVELOPMENT.md`):
 
 ```zsh
-# Function: DrawDialogBox
-# Description: Draws a Norton Commander-style dialog box with a title bar.
-# Parameters:
-#   $1 - x: Left position
-#   $2 - y: Top position  
-#   $3 - w: Width
-#   $4 - h: Height
-#   $5 - title: Dialog title
-#   $6 - bgColor: (optional) Background color, default Black
-# Returns: 0 on success, 1 if dimensions too small
-# Example: DrawDialogBox 10 5 40 10 "My Dialog" Blue
+#@fn DrawDialogBox
+#@brief Draws a Norton Commander-style dialog box with a title bar.
+#@args 1:x 2:y 3:w 4:h 5:title 6:bgColor(optional)
+#@ret status:0|1
 DrawDialogBox() {
   ...
 }
 ```
 
-### 3.3 Auto-Generate Documentation
-
-Create a script to extract documentation from source:
+### 3.3 Auto-Generate Documentation ✅
 
 ```zsh
-# scripts/generate-docs.zsh
-# Parses function comments and generates markdown
+# turbo_zsh/scripts/extract_zdoc — Parses #@ docblocks and generates API_MANUAL.md
 ```
 
 ---
 
 ## 🧪 Phase 4: Testing & Quality (2-3 weeks)
 
-### 4.1 Create Test Framework
+### 4.1 Create Test Framework ✅
 
-Simple Zsh-native test framework:
-
-```zsh
-# tests/framework.zsh
-test_assert_equals() {
-  local expected=$1 actual=$2 msg=$3
-  if [[ "$expected" == "$actual" ]]; then
-    echo "✓ $msg"
-  else
-    echo "✗ $msg: expected '$expected', got '$actual'"
-    return 1
-  fi
-}
-```
-
-### 4.2 Unit Tests for Libraries
+Zsh-native test framework in `turbo_zsh/test_lib.zsh`:
 
 ```zsh
-# tests/test-string.zsh
-source ../lib/util/string.zsh
+uses test_lib.zsh
 
-test_PadLeft() {
-  test_assert_equals "  abc" "$(PadLeft abc 5)" "PadLeft basic"
-  test_assert_equals "abc"   "$(PadLeft abcdef 3)" "PadLeft truncate"
-}
-
-test_PadRight() {
-  test_assert_equals "abc  " "$(PadRight abc 5)" "PadRight basic"
-}
+TestSection "[my_lib]"
+AssertTrue IsFunctionDefined MyFunc "MyFunc() is defined"
+AssertStringEquals "$actual" "$expected" "description"
+AssertContains "$actual" "substring" "description"
+AssertStatus "$?" 0 "description"
+PrintTestSummary
 ```
+
+### 4.2 Unit Tests for Libraries ✅
+
+Per-module test files in `turbo_zsh/tests/`:
+- `alerts_lib_test`, `app_lib_test`, `crt_lib_test`
+- `keys_lib_test`, `math_lib_test`, `string_lib_test`, `system_lib_test`
+- `tests` — runner that executes all test files
 
 ### 4.3 Visual/Integration Tests
 
-Interactive test runner for visual components:
-
-```zsh
-# tests/visual-test.zsh
-# Displays components and asks for manual verification
-```
+Interactive test runner for visual components — not yet implemented.
 
 ### 4.4 CI Integration
+
+Not yet implemented.
 
 ```yaml
 # .github/workflows/test.yml
@@ -208,7 +122,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run tests
-        run: zsh tests/run-tests.sh
+        run: zsh turbo_zsh/tests/tests
 ```
 
 ---
@@ -338,27 +252,35 @@ ohm doctor            # Check terminal capabilities
 
 ## 📋 Priority Matrix
 
-| Task | Impact | Effort | Priority |
-|------|--------|--------|----------|
-| Standardize file naming | Medium | Low | 🔴 High |
-| Create main README | High | Low | 🔴 High |
-| Add version file | Low | Low | 🟡 Medium |
-| Reorganize directories | High | High | 🟡 Medium |
-| Create test framework | High | Medium | 🟡 Medium |
-| Theme system | Medium | Medium | 🟢 Low |
-| Plugin system | Medium | High | 🟢 Low |
-| Auto-generate docs | Low | Medium | 🟢 Low |
+| Task | Impact | Effort | Priority | Status |
+|------|--------|--------|----------|--------|
+| Standardize file naming | Medium | Low | 🔴 High | ✅ Done |
+| Create main README | High | Low | 🔴 High | ✅ Done |
+| Add version file | Low | Low | 🟡 Medium | ✅ Done |
+| ZDOC inline docs | High | Medium | 🔴 High | ✅ Done |
+| Create test framework | High | Medium | 🟡 Medium | ✅ Done |
+| Auto-generate docs | Low | Medium | 🟢 Low | ✅ Done |
+| PascalCase naming convention | Medium | Medium | 🔴 High | 🔄 In progress |
+| Consolidate shared functions | Medium | Low | 🟡 Medium | 🔄 In progress |
+| CI integration | Medium | Low | 🟡 Medium | Not started |
+| Visual/integration tests | Medium | Medium | 🟡 Medium | Not started |
+| Theme system | Medium | Medium | 🟢 Low | Not started |
+| Plugin system | Medium | High | 🟢 Low | Not started |
 
 ---
 
-## 🚀 Quick Wins (Do This Week)
+## 🚀 Quick Wins
 
 1. **✅ Create comprehensive README.md** — Done!
 2. **Add `.gitignore` entries** for user configs
-3. **Create `version.zsh`** with semantic versioning
+3. **✅ Create `version.zsh`** with semantic versioning
 4. **Add `CHANGELOG.md`** to track changes
-5. **Rename `samples/` to `demos/`** for clarity
-6. **Add missing load guards** to all libraries
+5. **✅ Standardize file naming** — executables: no extension + shebang; sourced: `.zsh`
+6. **✅ Add load guards** to all libraries
+7. **✅ ZDOC v1 docblocks** on all public functions
+8. **✅ PascalCase public functions** in alerts_lib.zsh
+9. **✅ Consolidate shared functions** — `SourceIfExists`, `AddPath`, `InsertPath` into system_lib.zsh
+10. **✅ `global()` helper** — cleaner alternative to `typeset -g`
 
 ---
 
@@ -366,11 +288,10 @@ ohm doctor            # Check terminal capabilities
 
 | Week | Focus |
 |------|-------|
-| 1 | Quick wins, file standardization |
-| 2-3 | Directory reorganization |
-| 4-5 | Documentation |
-| 6-7 | Testing framework |
-| 8+ | New features (themes, components) |
+| 1    | Quick wins, file standardization |
+| 2-3  | Documentation, naming conventions |
+| 4-5  | Testing, CI integration |
+| 6+   | New features (themes, components) |
 
 ---
 
@@ -384,4 +305,4 @@ Create `CONTRIBUTING.md` with:
 
 ---
 
-*Last updated: January 30, 2026*
+*Last updated: March 17, 2026*

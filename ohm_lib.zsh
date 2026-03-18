@@ -2,8 +2,8 @@
 
 uses system_lib.zsh
 
-ohm_prefix() {
+OhmPrefix() {
   printf "\e[91mΩ\e[0m %s" "${1}"
 }
 
-env_user_host() { echo ${OHM_USER_PATH}/env_${USER}_${HOST%%.*}; }
+EnvUserHost() { echo ${OHM_USER_PATH}/env_${USER}_${HOST%%.*}; }

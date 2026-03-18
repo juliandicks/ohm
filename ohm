@@ -232,7 +232,7 @@ main() {
       if [[ -f "${OHM_PATH}/init.zsh" ]]; then
         # shellcheck source=/dev/null
         source "${OHM_PATH}/init.zsh"
-        ohm_version
+        OhmVersion
       else
         err "Missing init.zsh"
         return 1

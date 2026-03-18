@@ -12,8 +12,8 @@ uses crt_lib.zsh
 
 uses ohm_lib.zsh
 
-source $( env_user_host ) || {
-  ErrorBar "Missing $(env_user_host)"
+source $( EnvUserHost ) || {
+  ErrorBar "Missing $(EnvUserHost)"
   exit 2
 }
 

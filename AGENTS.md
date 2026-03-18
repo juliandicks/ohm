@@ -31,7 +31,7 @@
 ## Common Commands
 - Start toolkit in shell: `source ./init.zsh`
 - Open menu: `./m`
-- Version info: `source ./init.zsh && ohm_version`
+- Version info: `source ./init.zsh && OhmVersion`
 - Syntax check a script: `zsh -n path/to/file.zsh`
 
 ## Function Documentation Standard (ZDOC v1)

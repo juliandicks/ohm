@@ -38,7 +38,7 @@ pretty_print() {
     fi
   fi
 
-	local maxStrW=$(min $maxW $(max ${#java_home} $(max ${#java_path} ${#java_version} )))
+	local maxStrW=$(Min $maxW $(Max ${#java_home} $(Max ${#java_path} ${#java_version} )))
   local dlgW=$(( maxStrW + usedW ))
 
 	local tHDR="$Black;$(AsBg BrightWhite)"

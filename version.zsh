@@ -7,7 +7,7 @@ export OHM_VERSION_NAME="Genesis"
 
 # Check if there are pending updates from upstream
 # Returns: 0 if up to date, 1 if updates available, 2 if unable to check
-ohm_check_updates() {
+OhmCheckUpdates() {
   local remote_branch local_hash remote_hash
 
   # Silently fetch latest from origin (timeout after 5 seconds)
@@ -37,7 +37,7 @@ ohm_check_updates() {
 }
 
 # Display version information
-ohm_version() {
+OhmVersion() {
   source ${OHM_PATH}/ohm_banner
   echo ""
   echo "  Version: ${OHM_VERSION} (${OHM_VERSION_NAME})"
@@ -45,7 +45,7 @@ ohm_version() {
   echo "     Path: ${OHM_PATH}"
 
   # Check for updates
-  ohm_check_updates
+  OhmCheckUpdates
   case $? in
     0) echo "  Updates: ✓ No" ;;
     1) echo "  Updates: ✗ Updates available (run 'update')" ;;
