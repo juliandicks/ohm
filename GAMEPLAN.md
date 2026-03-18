@@ -129,6 +129,23 @@ jobs:
 
 ## 🎨 Phase 5: Features & Usability (Ongoing)
 
+### 5.0 Config Script — `config`
+
+Interactive TUI for configuring Ohm settings. Uses crt_lib, keys_lib, spinner_lib, string_lib.
+
+**Status:** 🔄 First pass done (`config --spinner`), needs review and bug fixes.
+
+**Implemented:**
+- [x] `config --spinner` — scrollable spinner picker with live animated preview
+- [x] Wired into `ohm config spinner`
+- [x] `SpinnerSetDefault` in spinner_lib.zsh
+
+**TODO:**
+- [ ] Review and fix bugs in `config` script
+- [ ] Persist spinner choice (write to user config file, load on init)
+- [ ] `config --theme` — theme picker (after theme system lands)
+- [ ] `config --all` — combined settings screen
+
 ### 5.1 Theme System
 
 ```zsh
@@ -264,6 +281,7 @@ ohm doctor            # Check terminal capabilities
 | Consolidate shared functions | Medium | Low | 🟡 Medium | 🔄 In progress |
 | CI integration | Medium | Low | 🟡 Medium | Not started |
 | Visual/integration tests | Medium | Medium | 🟡 Medium | Not started |
+| Config script (`config --spinner`) | Medium | Low | 🟡 Medium | 🔄 Review & bug fixes |
 | Theme system | Medium | Medium | 🟢 Low | Not started |
 | Plugin system | Medium | High | 🟢 Low | Not started |
 

@@ -202,6 +202,7 @@ Usage: ./ohm <command> [args]
 Commands:
   doctor          Validate install and configuration
   config init     Create missing user config templates
+  config spinner  Configure default spinner style
   version         Print version information
   help            Show this help
 EOF
@@ -220,6 +221,9 @@ main() {
         init)
           shift
           config_init "$@"
+          ;;
+        spinner|--spinner)
+          source "${OHM_PATH}/config" spinner
           ;;
         *)
           err "Unknown config subcommand: ${1:-<none>}"
