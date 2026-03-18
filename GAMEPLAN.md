@@ -260,7 +260,7 @@ ohm doctor            # Check terminal capabilities
 | ZDOC inline docs | High | Medium | 🔴 High | ✅ Done |
 | Create test framework | High | Medium | 🟡 Medium | ✅ Done |
 | Auto-generate docs | Low | Medium | 🟢 Low | ✅ Done |
-| PascalCase naming convention | Medium | Medium | 🔴 High | 🔄 In progress |
+| PascalCase naming convention | Medium | Medium | 🔴 High | ✅ Done |
 | Consolidate shared functions | Medium | Low | 🟡 Medium | 🔄 In progress |
 | CI integration | Medium | Low | 🟡 Medium | Not started |
 | Visual/integration tests | Medium | Medium | 🟡 Medium | Not started |
@@ -278,7 +278,7 @@ ohm doctor            # Check terminal capabilities
 5. **✅ Standardize file naming** — executables: no extension + shebang; sourced: `.zsh`
 6. **✅ Add load guards** to all libraries
 7. **✅ ZDOC v1 docblocks** on all public functions
-8. **✅ PascalCase public functions** in alerts_lib.zsh
+8. **✅ PascalCase public functions** in all modules
 9. **✅ Consolidate shared functions** — `SourceIfExists`, `AddPath`, `InsertPath` into system_lib.zsh
 10. **✅ `global()` helper** — cleaner alternative to `typeset -g`
 
