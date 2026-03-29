@@ -1,4 +1,4 @@
-# version.zsh — Ohm version information
+# version.zsh — ohm version information
 # shellcheck disable=SC2034
 
 export OHM_VERSION="0.1.0"

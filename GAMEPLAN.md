@@ -1,6 +1,6 @@
 # Ωhm — Development Gameplan
 
-A roadmap for improving the structure, maintainability, and usability of the Ohm terminal UI toolkit.
+A roadmap for improving the structure, maintainability, and usability of the ohm terminal UI toolkit.
 
 ---
 
@@ -131,7 +131,7 @@ jobs:
 
 ### 5.0 Config Script — `config`
 
-Interactive TUI for configuring Ohm settings. Uses crt_lib, keys_lib, spinner_lib, string_lib.
+Interactive TUI for configuring ohm settings. Uses crt_lib, keys_lib, spinner_lib, string_lib.
 
 **Status:** 🔄 First pass done (`config --spinner`), needs review and bug fixes.
 

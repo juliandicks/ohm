@@ -10,7 +10,7 @@
 \____/_/ /_/_/ /_/ /_/
 ```
 
-Ohm is a terminal user interface framework that brings back the nostalgic charm of DOS-era applications—think Turbo Pascal, Norton Commander, and Borland IDEs—to modern macOS and Linux terminals. Written entirely in Zsh, it provides colorful menus, dialog boxes, spinners, keyboard handling, and more.
+ohm is a terminal user interface framework that brings back the nostalgic charm of DOS-era applications—think Turbo Pascal, Norton Commander, and Borland IDEs—to modern macOS and Linux terminals. Written entirely in Zsh, it provides colorful menus, dialog boxes, spinners, keyboard handling, and more.
 
 ## ✨ Features
 
@@ -55,6 +55,8 @@ ohm/
 
 ## 🚀 Quick Start
 
+Requirements: `zsh` and `git`.
+
 ### Installation
 
 ```zsh
@@ -62,7 +64,7 @@ ohm/
 git clone https://github.com/juliandicks/ohm.git ~/ohm
 cd ~/ohm
 
-# Install dependencies and create local config templates
+# Install dependencies
 ./setup
 
 # Add to your .zshrc
@@ -100,7 +102,7 @@ uses crt_lib.zsh
 uses alerts_lib.zsh
 
 # Now you have access to all turbo_zsh functions!
-InfoBar "Hello from Ohm!"
+InfoBar "Hello from ohm!"
 SetColor Yellow Blue
 ClrScr
 WriteXY 10 5 "Welcome to the future of terminal UIs"
