@@ -17,8 +17,8 @@ source $( EnvUserHost ) || {
   exit 2
 }
 
-typeset -p SERVICE_LIST &>/dev/null || {
-  ErrorBar "Please declare SERVICE_LIST in your environment file"
+typeset -p SERVICE_LIST &>/dev/null || typeset -p SERVICE_CONTEXTS &>/dev/null || {
+  ErrorBar "Please declare SERVICE_LIST or SERVICE_CONTEXTS in your environment file"
   exit 1
 }
 
@@ -27,6 +27,46 @@ labelWidth=0
 mode=pretty
 show_ports=0
 ports=()
+_cli_context=""
+_active_context=""
+
+# --- Context Resolution ---
+resolve_service_list() {
+  local context_name="$1"
+
+  # Tier 1: CLI override via -c <name>
+  if [[ -n "$context_name" ]]; then
+    local var_name="SERVICES_${(U)context_name}"
+    if typeset -p "$var_name" &>/dev/null; then
+      eval "SERVICE_LIST=(\${(kv)${var_name}})"
+      _active_context="${(U)context_name}"
+      return 0
+    fi
+    ErrorBar "Unknown service context: $context_name (expected $var_name)"
+    exit 1
+  fi
+
+  # Tier 2: Walk $PWD upward through SERVICE_CONTEXTS
+  if typeset -p SERVICE_CONTEXTS &>/dev/null; then
+    local dir="$PWD"
+    while [[ "$dir" != "/" ]]; do
+      if [[ -n "${SERVICE_CONTEXTS[$dir]:-}" ]]; then
+        local var_name="${SERVICE_CONTEXTS[$dir]}"
+        if typeset -p "$var_name" &>/dev/null; then
+          eval "SERVICE_LIST=(\${(kv)${var_name}})"
+          _active_context="${var_name#SERVICES_}"
+          return 0
+        fi
+        ErrorBar "SERVICE_CONTEXTS[$dir] references undefined: $var_name"
+        exit 1
+      fi
+      dir="${dir:h}"
+    done
+  fi
+
+  # Tier 3: Fall through to SERVICE_LIST (backward compatible)
+  _active_context=""
+}
 
 # --- Helper Functions ---
 get_listening_ports() {
@@ -49,16 +89,23 @@ show_help() {
 Usage: $APP [OPTIONS]
 
 Options:
-  -h, --help    Show this help message and exit
-  -a, --all     List all services
-  -r, --running List only running services
-  -s, --stopped List only stopped services
-  -np           Hide port numbers
+  -h, --help         Show this help message and exit
+  -c, --context NAME Use a named service context (SERVICES_<NAME>)
+  -a, --all          List all services
+  -r, --running      List only running services
+  -s, --stopped      List only stopped services
+  -np                Hide port numbers
+
+Context Resolution:
+  Without -c, the script checks SERVICE_CONTEXTS for directory mappings.
+  It walks from \$PWD upward to find the first matching prefix.
+  Falls back to SERVICE_LIST if no context matches.
 
 Examples:
-  $APP
-  $APP -r
-  $APP -s
+  $APP                  # auto-detect context from \$PWD
+  $APP -c slack         # force SERVICES_SLACK context
+  $APP -r               # running services (auto-detect)
+  $APP -c agent -s      # stopped services in agent context
 EOF
 }
 
@@ -119,6 +166,14 @@ parse_options() {
         show_help
         exit 0
         ;;
+      -c|--context)
+        [[ -z "${2:-}" || "$2" == -* ]] && {
+          ErrorBar "Option -c requires a context name"
+          exit 1
+        }
+        _cli_context="$2"
+        shift 2
+        ;;
       -a|--all)
         mode=all
         shift
@@ -145,17 +200,18 @@ parse_options() {
 }
 
 main() {
+  parse_options "$@"
+  resolve_service_list "$_cli_context"
+
   # Build port map
   for p in $(get_listening_ports); do
     ports[$p]=1
   done
 
   if (( ${#SERVICE_LIST[@]} == 0 )); then
-    echo "No services found in SERVICE_LIST."
+    echo "No services found."
     exit 1
   fi
-
-  parse_options "$@"
 
   if [[ $mode == 'pretty' ]]; then
     pretty_print
