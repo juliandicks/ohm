@@ -146,6 +146,18 @@ Interactive TUI for configuring ohm settings. Uses crt_lib, keys_lib, spinner_li
 - [ ] `config --theme` — theme picker (after theme system lands)
 - [ ] `config --all` — combined settings screen
 
+### 5.0.1 Services Script — `services`
+
+Context-aware service port checker. Checks user-defined service ports against listening ports.
+
+**Status:** ✅ Done — production quality.
+
+**Implemented:**
+- [x] Context-aware resolution: CLI override (`-c`), directory walk via `SERVICE_CONTEXTS`, `SERVICE_LIST` fallback
+- [x] Named service arrays with `SERVICES_` prefix convention
+- [x] Wired into `ohm config spinner` (config dispatch)
+- [x] Production polish: theme variables, proper types, consistent naming, `ErrorBar` errors
+
 ### 5.1 Theme System
 
 ```zsh
@@ -281,7 +293,8 @@ ohm doctor            # Check terminal capabilities
 | Consolidate shared functions | Medium | Low | 🟡 Medium | 🔄 In progress |
 | CI integration | Medium | Low | 🟡 Medium | Not started |
 | Visual/integration tests | Medium | Medium | 🟡 Medium | Not started |
-| Config script (`config --spinner`) | Medium | Low | 🟡 Medium | 🔄 Review & bug fixes |
+| Config script (`config --spinner`) | Medium | Low | 🟡 Medium | ✅ Done |
+| Context-aware `services` | High | Medium | 🟡 Medium | ✅ Done |
 | Theme system | Medium | Medium | 🟢 Low | Not started |
 | Plugin system | Medium | High | 🟢 Low | Not started |
 
