@@ -1,5 +1,5 @@
 #!/bin/zsh
-# shellcheck disable=SC2296,SC2154,SC1090,SC2046
+# shellcheck disable=SC2296,SC2154,SC1090,SC2046,SC2086
 
 # services - List and display status of user-defined services
 # Usage: see show_help function or run with -h
@@ -12,7 +12,7 @@ uses crt_lib.zsh
 
 uses ohm_lib.zsh
 
-source $( EnvUserHost ) || {
+source "$(EnvUserHost)" || {
   ErrorBar "Missing $(EnvUserHost)"
   exit 2
 }
@@ -25,8 +25,8 @@ typeset -p SERVICE_LIST &>/dev/null || typeset -p SERVICE_CONTEXTS &>/dev/null |
 # --- Variable Initialization ---
 labelWidth=0
 mode=pretty
-show_ports=0
-ports=()
+hide_ports=0
+typeset -A ports=()
 _cli_context=""
 _active_context=""
 
@@ -78,7 +78,7 @@ get_listening_ports() {
 }
 
 get_label_width() {
-  for label in ${(k)SERVICE_LIST}; do
+  for label in "${(k)SERVICE_LIST[@]}"; do
     (( ${#label} > labelWidth )) && labelWidth=${#label}
   done
 }
@@ -94,7 +94,7 @@ Options:
   -a, --all          List all services
   -r, --running      List only running services
   -s, --stopped      List only stopped services
-  -np                Hide port numbers
+  -np, --no-ports    Hide port numbers
 
 Context Resolution:
   Without -c, the script checks SERVICE_CONTEXTS for directory mappings.
@@ -110,34 +110,37 @@ EOF
 }
 
 is_port_open() {
-  [[ -n ${ports[$1]} ]]
+  [[ -n "${ports[$1]:-}" ]]
 }
 
 pretty_print() {
   CursorOff
   get_label_width
-  local bg=$(AsBg $TextAttrBg)
-  local tDLGB="$BrightWhite;$bg"
-  printf "\033[%sm\n   \033[30;107m ≡ %s  \033[0m\n" $bg "$(PadMiddle "Services" $(( labelWidth + 5 )))"
-  local color
-  for service in ${(ok)SERVICE_LIST}; do
+
+  local headerAttr="$Black;$(AsBg BrightWhite)"
+  local dialogAttr="$BrightWhite;$(AsBg Blue)"
+  local runAttr="$BrightWhite;$(AsBg Green)"
+  local bgAttr=$(AsBg $TextAttrBg)
+  local footerAttr="$BrightWhite;$bgAttr"
+
+  printf "\e[%sm\n   \e[%sm ≡ %s  \e[0m\n" "$bgAttr" "$headerAttr" "$(PadMiddle "Services" $(( labelWidth + 5 )))"
+  for service in "${(ok)SERVICE_LIST[@]}"; do
     local port=${SERVICE_LIST[$service]}
+    local color="$dialogAttr"
     if is_port_open "$port"; then
-      color="97;42" # bold white on green
-    else
-      color="37" # normal white
+      color="$runAttr"
     fi
-    printf "\033[%sm   \033[97;44m▌\033[%sm %-*s %5d \033[97;44m▐\033[0m\n" "$bg" "$color" "$labelWidth" "$service" "$port"
+    printf "\e[%sm   \e[%sm▌\e[%sm %-*s %5d \e[%sm▐\e[0m\n" "$bgAttr" "$dialogAttr" "$color" "$labelWidth" "$service" "$port" "$dialogAttr"
   done
-  printf "\033[%sm   \033[%sm" $bg $tDLGB
+  printf "\e[%sm   \e[%sm" "$bgAttr" "$footerAttr"
   RepeatChar "▀" $(( labelWidth + 10 ))
-  printf "\033[0m\n"
+  printf "\e[0m\n"
   CursorOn
 }
 
 print_line() {
-  local line=$1
-  [[ $show_ports -eq 0 ]] && line="$line:$2"
+  local line="$1"
+  [[ $hide_ports -eq 0 ]] && line="$line:$2"
   [[ $mode == 'all' ]] && {
     if [[ $3 -eq 0 ]]; then
       line="$line RUNNING"
@@ -148,8 +151,8 @@ print_line() {
   echo "$line"
 }
 
-gross_print() {
-  for service in ${(ok)SERVICE_LIST}; do
+list_print() {
+  for service in "${(ok)SERVICE_LIST[@]}"; do
     local port=${SERVICE_LIST[$service]}
     if is_port_open "$port"; then
       [[ $mode == 'running' || $mode == 'all' ]] && print_line "$service" "$port" 0
@@ -186,11 +189,11 @@ parse_options() {
         mode=stopped
         shift
         ;;
-      -np)
-        show_ports=1
+      -np|--no-ports)
+        hide_ports=1
         shift
         ;;
-      *) # unknown short option
+      *)
         echo "Unknown option: $1" >&2
         show_help
         exit 1
@@ -209,14 +212,14 @@ main() {
   done
 
   if (( ${#SERVICE_LIST[@]} == 0 )); then
-    echo "No services found."
+    ErrorBar "No services found."
     exit 1
   fi
 
   if [[ $mode == 'pretty' ]]; then
     pretty_print
   else
-    gross_print
+    list_print
   fi
 }
 
