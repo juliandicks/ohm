@@ -19,7 +19,7 @@ A roadmap for improving the structure, maintainability, and usability of the ohm
 - ~~Missing test coverage~~ ✅ test_lib.zsh + per-module tests
 - ~~No versioning or changelog~~ ✅ version.zsh exists
 - ~~Some code duplication between files~~ ✅ Consolidated into system_lib.zsh
-- User config mixed with core functionality
+- User config is gitignored, but the example/template flow is still incomplete
 
 ---
 
@@ -28,7 +28,7 @@ A roadmap for improving the structure, maintainability, and usability of the ohm
 ### 2.1 Separate User Config from Repo
 
 **Action Items:**
-- [ ] Add `user/` to `.gitignore`
+- [x] Add `user/` to `.gitignore`
 - [ ] Create `user.example/` with template files
 - [ ] Add setup script to copy examples to user/
 - [ ] Document user customization in README
@@ -155,7 +155,7 @@ Context-aware service port checker. Checks user-defined service ports against li
 **Implemented:**
 - [x] Context-aware resolution: CLI override (`-c`), directory walk via `SERVICE_CONTEXTS`, `SERVICE_LIST` fallback
 - [x] Named service arrays with `SERVICES_` prefix convention
-- [x] Wired into `ohm config spinner` (config dispatch)
+- [x] Available as a standalone utility script
 - [x] Production polish: theme variables, proper types, consistent naming, `ErrorBar` errors
 
 ### 5.1 Theme System
@@ -290,10 +290,10 @@ ohm doctor            # Check terminal capabilities
 | Create test framework | High | Medium | 🟡 Medium | ✅ Done |
 | Auto-generate docs | Low | Medium | 🟢 Low | ✅ Done |
 | PascalCase naming convention | Medium | Medium | 🔴 High | ✅ Done |
-| Consolidate shared functions | Medium | Low | 🟡 Medium | 🔄 In progress |
+| Consolidate shared functions | Medium | Low | 🟡 Medium | ✅ Done |
 | CI integration | Medium | Low | 🟡 Medium | Not started |
 | Visual/integration tests | Medium | Medium | 🟡 Medium | Not started |
-| Config script (`config --spinner`) | Medium | Low | 🟡 Medium | ✅ Done |
+| Config script (`config --spinner`) | Medium | Low | 🟡 Medium | 🔄 In progress |
 | Context-aware `services` | High | Medium | 🟡 Medium | ✅ Done |
 | Theme system | Medium | Medium | 🟢 Low | Not started |
 | Plugin system | Medium | High | 🟢 Low | Not started |
@@ -303,9 +303,9 @@ ohm doctor            # Check terminal capabilities
 ## 🚀 Quick Wins
 
 1. **✅ Create comprehensive README.md** — Done!
-2. **Add `.gitignore` entries** for user configs
+2. **✅ Add `.gitignore` entries** for user configs
 3. **✅ Create `version.zsh`** with semantic versioning
-4. **Add `CHANGELOG.md`** to track changes
+4. **✅ Add `CHANGELOG.md`** to track changes
 5. **✅ Standardize file naming** — executables: no extension + shebang; sourced: `.zsh`
 6. **✅ Add load guards** to all libraries
 7. **✅ ZDOC v1 docblocks** on all public functions
@@ -336,4 +336,4 @@ Create `CONTRIBUTING.md` with:
 
 ---
 
-*Last updated: March 17, 2026*
+*Last updated: April 18, 2026*

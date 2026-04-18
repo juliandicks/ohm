@@ -9,6 +9,7 @@
 ## Key Entrypoints
 
 - `init.zsh` — main initialization file; source from shell startup
+- `init_env.zsh` — early environment/bootstrap file; intended to be sourced from `.zshenv` so core `turbo_zsh` helpers are available in every Zsh invocation
 - `m` — launcher for the interactive menu system
 - `services`, `sysinfo`, `javainfo`, `setup`, `update` — executable utility scripts
 - `ohm` — CLI dispatcher (`ohm doctor`, `ohm version`, `ohm config spinner`, etc.)
@@ -41,6 +42,12 @@ ohm/
 - Sourced libraries use `.zsh` extension, no shebang. Examples: `crt_lib.zsh`, `init.zsh`.
 - Executable scripts have no file extension and must start with `#!/bin/zsh`. Examples: `m`, `sysinfo`, `tests`, `extract_zdoc`.
 - Rationale: clear distinction between executables (run directly) and libraries (sourced into shell).
+
+## Shell Loading Model
+
+- `~/.zshenv` should source `init_env.zsh` so every Zsh invocation, including non-interactive shells and scripts, gets the basic `turbo_zsh` bootstrap functions.
+- Interactive/user shell startup should source `init.zsh`.
+- `init.zsh` is responsible for loading the user's global and machine-specific initialization from `user/`, including `init_${USER}` and `init_${USER}_${HOST%%.*}`.
 
 ## Naming Conventions
 
@@ -112,4 +119,4 @@ PrintTestSummary
 - `config --theme` and `config --all` not yet implemented.
 - CI integration not yet set up.
 - Visual/integration tests not yet implemented.
-- `user/` directory not yet gitignored (see GAMEPLAN.md Phase 2.1).
+- `user/` is gitignored; next follow-up is templating/documenting the user config flow.
