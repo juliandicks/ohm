@@ -8,11 +8,19 @@
 
 ## Key Entrypoints
 
+- `bin/ohm` — public CLI entrypoint exposed on `PATH`
+- `bin/ohm-menu` — public menu launcher exposed on `PATH`
 - `init.zsh` — main initialization file; source from shell startup
 - `init_env.zsh` — early environment/bootstrap file; intended to be sourced from `.zshenv` so core `turbo_zsh` helpers are available in every Zsh invocation
-- `m` — launcher for the interactive menu system
+- `m` — core menu launcher script kept in the repo root
 - `services`, `sysinfo`, `javainfo`, `setup`, `update` — executable utility scripts
 - `ohm` — CLI dispatcher (`ohm doctor`, `ohm version`, `ohm config spinner`, etc.)
+
+Preferred direction:
+- `ohm` should become the main public CLI surface.
+- Generic top-level commands such as `config`, `services`, `sysinfo`, `spinner`, and `update` should move behind `ohm` subcommands over time.
+- `./setup` should remain repo-local, not a globally relied-on `PATH` command.
+- Prefer a small `bin/` directory with supported public entrypoints instead of adding the repo root to `PATH`.
 
 ## Directory Map
 
@@ -82,7 +90,7 @@ Internal `_underscore` helpers may omit docblocks. Full reference: `turbo_zsh/DE
 ```zsh
 source ./init.zsh                     # Load toolkit into current shell
 source ./init.zsh && OhmVersion       # Show version info
-./m                                   # Open interactive menu
+ohm-menu                              # Open interactive menu
 zsh -n path/to/file.zsh              # Syntax-check a script (run after edits)
 zsh turbo_zsh/tests/tests             # Run all unit tests
 ohm doctor                            # Check terminal capabilities
@@ -117,6 +125,8 @@ PrintTestSummary
 
 - `config --spinner` script: first pass done, needs bug fixes and persistence (write to user config).
 - `config --theme` and `config --all` not yet implemented.
+- Command namespace cleanup: move generic top-level commands behind `ohm` subcommands.
+- Public `bin/` entrypoint layout is in progress; repo root scripts remain implementation files.
 - CI integration not yet set up.
 - Visual/integration tests not yet implemented.
 - `user/` is gitignored; next follow-up is templating/documenting the user config flow.

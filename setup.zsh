@@ -257,7 +257,7 @@ main() {
   configure_zshenv
   append_shell_hook
   run_doctor
-  info "Done. Restart shell and run: m"
+  info "Done. Restart shell and run: ohm-menu"
 }
 
 main "$@"

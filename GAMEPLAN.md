@@ -33,6 +33,21 @@ A roadmap for improving the structure, maintainability, and usability of the ohm
 - [ ] Add setup script to copy examples to user/
 - [ ] Document user customization in README
 
+### 2.2 Command Surface Cleanup
+
+Reduce namespace collisions from generic top-level script names by making `ohm` the primary public CLI.
+
+**Action Items:**
+- [ ] Move feature commands behind `ohm` subcommands:
+  - `config` -> `ohm config`
+  - `services` -> `ohm services`
+  - `sysinfo` -> `ohm sysinfo`
+  - `spinner` -> `ohm spinner` or fold into `ohm config spinner`
+  - `update` -> `ohm update`
+- [ ] Keep `./setup` as a repo-local installer, but do not rely on `setup` being on `PATH`
+- [ ] Audit other public entrypoints and decide which remain supported versus repo-local only
+- [ ] Add compatibility shims or a deprecation window for renamed commands
+
 ---
 
 ## 📖 Phase 3: Documentation (1-2 weeks)
@@ -277,6 +292,117 @@ ohm keys              # Key code debugger
 ohm doctor            # Check terminal capabilities
 ```
 
+### 6.4 Public Entrypoint Layout
+
+Public entrypoints now live in `bin/`; continue moving toward a small supported surface there.
+
+**Target Direction:**
+- [x] Add a small `bin/` directory for supported public entrypoints
+- [ ] Keep `ohm` as the canonical CLI
+- [x] Optionally expose `ohm-menu` as a supported launcher
+- [x] Update setup/init flow to add `bin/` instead of the repo root to `PATH`
+- [ ] Remove reliance on generic top-level command names being available globally
+- [ ] Audit and clean up any remaining assumptions that the repo root itself is on `PATH`
+
+---
+
+## 🚀 Phase 7: Product Launch Readiness
+
+To ship ohm more like Oh My Zsh, the project needs a complete install, customization, documentation, and community surface, not just a working codebase.
+
+### 7.1 Installation & Bootstrap
+
+Create a polished install path for first-time users and unattended installs.
+
+**Action Items:**
+- [ ] Add a one-line remote installer (`curl`/`wget`) that clones/downloads ohm and runs setup safely
+- [ ] Support unattended install mode for automation and dotfiles bootstrap
+- [ ] Support custom install directory via environment variable
+- [ ] Backup or migrate existing user config on install
+- [ ] Add uninstall and reset flows
+- [ ] Make `ohm doctor` cover full install/bootstrap health checks
+- [ ] Add install smoke tests for fresh machine scenarios
+
+### 7.2 Default User Experience
+
+Make the out-of-box experience feel intentional, safe, and impressive on first run.
+
+**Action Items:**
+- [ ] Create a starter user config template that setup can copy into `user/`
+- [ ] Add a first-run welcome flow with recommended defaults
+- [ ] Pick and document a default theme/spinner/profile experience
+- [ ] Add a clean sample menu and showcase demos that are safe to enable by default
+- [ ] Add migration guidance for users updating from older ohm layouts
+
+### 7.3 Customization, Themes & Extensions
+
+Oh My Zsh succeeds partly because the customization model is obvious and extensible.
+
+**Action Items:**
+- [ ] Define a stable custom override directory model for user-added scripts/themes/extensions
+- [ ] Implement the theme system planned in Phase 5
+- [ ] Decide what a first-class ohm extension/plugin looks like and document the contract
+- [ ] Bundle a small curated set of high-quality themes/profiles instead of a single default only
+- [ ] Add discovery docs for creating custom menus, themes, and local extensions without forking
+
+### 7.4 Documentation & Website
+
+Users need a release-grade learning path, not just source files.
+
+**Action Items:**
+- [ ] Build a proper `docs/` tree with install, upgrade, customization, FAQ, and troubleshooting guides
+- [ ] Add screenshots/GIFs/asciinema clips that show what ohm looks like in practice
+- [ ] Write macOS and Linux install guides, including shell startup file behavior
+- [ ] Document public commands, supported terminals, and compatibility expectations
+- [ ] Add a release-ready landing page or lightweight docs site with install commands and feature highlights
+
+### 7.5 Packaging & Distribution
+
+Make ohm easy to install, update, and reference from outside the repo.
+
+**Action Items:**
+- [ ] Decide canonical install location (`~/.ohm`, `~/ohm`, or configurable default)
+- [ ] Publish tagged releases and release notes
+- [ ] Add a Homebrew tap/formula or another package-manager-friendly install path
+- [ ] Ensure setup works from a tarball/release artifact, not only from a git clone
+- [ ] Add stable URLs for install and docs
+
+### 7.6 Quality, Compatibility & Release Engineering
+
+Launch requires confidence across shells, terminals, and update paths.
+
+**Action Items:**
+- [ ] Add CI for syntax, unit tests, install tests, and CLI smoke tests
+- [ ] Add a compatibility matrix for macOS/Linux and supported Zsh versions
+- [ ] Add non-interactive smoke tests for `ohm`, `ohm-menu`, setup, and update flows
+- [ ] Add visual/integration tests for terminal UI rendering where feasible
+- [ ] Add release checklists and automated pre-release verification
+- [ ] Decide how updates are delivered and whether auto-update support is in scope
+
+### 7.7 Trust, Governance & Community
+
+An open-source launch needs contributor and user-facing project hygiene.
+
+**Action Items:**
+- [ ] Add a top-level `LICENSE`
+- [ ] Add `CONTRIBUTING.md`
+- [ ] Add `CODE_OF_CONDUCT.md`
+- [ ] Add `SECURITY.md`
+- [ ] Add GitHub issue templates and PR templates
+- [ ] Enable Discussions or document where community support should happen
+- [ ] Define maintainer expectations and release ownership
+
+### 7.8 Launch Program
+
+Treat launch as a staged rollout, not a one-time publish.
+
+**Action Items:**
+- [ ] Define launch criteria for beta vs v1.0
+- [ ] Run a small external beta with fresh-user install feedback
+- [ ] Collect and fix first-run paper cuts before broad announcement
+- [ ] Prepare announcement copy, demo assets, and example configurations
+- [ ] Create a post-launch backlog for themes, plugins/extensions, and platform improvements
+
 ---
 
 ## 📋 Priority Matrix
@@ -291,11 +417,19 @@ ohm doctor            # Check terminal capabilities
 | Auto-generate docs | Low | Medium | 🟢 Low | ✅ Done |
 | PascalCase naming convention | Medium | Medium | 🔴 High | ✅ Done |
 | Consolidate shared functions | Medium | Low | 🟡 Medium | ✅ Done |
+| Command surface cleanup | High | Medium | 🔴 High | Not started |
+| Install/bootstrap productization | High | Medium | 🔴 High | Not started |
+| Default user template and first-run UX | High | Medium | 🔴 High | Not started |
+| Docs site and launch docs | High | Medium | 🔴 High | Not started |
+| Packaging and release distribution | High | Medium | 🔴 High | Not started |
+| Governance and community files | High | Low | 🟡 Medium | Not started |
 | CI integration | Medium | Low | 🟡 Medium | Not started |
 | Visual/integration tests | Medium | Medium | 🟡 Medium | Not started |
 | Config script (`config --spinner`) | Medium | Low | 🟡 Medium | 🔄 In progress |
 | Context-aware `services` | High | Medium | 🟡 Medium | ✅ Done |
+| Public `bin/` entrypoint layout | High | Medium | 🟡 Medium | 🔄 In progress |
 | Theme system | Medium | Medium | 🟢 Low | Not started |
+| Extension/plugin model | High | High | 🟡 Medium | Not started |
 | Plugin system | Medium | High | 🟢 Low | Not started |
 
 ---
@@ -320,9 +454,11 @@ ohm doctor            # Check terminal capabilities
 | Week | Focus |
 |------|-------|
 | 1    | Quick wins, file standardization |
-| 2-3  | Documentation, naming conventions |
-| 4-5  | Testing, CI integration |
-| 6+   | New features (themes, components) |
+| 2-3  | Documentation, naming conventions, command consolidation |
+| 4-5  | Public `bin/` layout, install/bootstrap, command deprecations |
+| 6-7  | CI, compatibility, release engineering |
+| 8-9  | Docs site, screenshots, packaging, governance files |
+| 10+  | Beta launch, feedback fixes, themes/extensions, broader release |
 
 ---
 

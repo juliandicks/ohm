@@ -3,7 +3,7 @@
 # source ${OHM_PATH}/version.zsh
 uses ohm_lib.zsh
 
-AddPath "$OHM_PATH"
+AddPath "$OHM_PATH/bin"
 
 export OHM_USER_PATH=${0:A:h}/user
 

@@ -25,6 +25,10 @@ ohm is a terminal user interface framework that brings back the nostalgic charm 
 
 ```
 ohm/
+├── bin/                  # Public entrypoints added to PATH
+│   ├── ohm               # Canonical CLI wrapper
+│   └── ohm-menu          # Public menu launcher wrapper
+│
 ├── init.zsh              # Main entry point - source this in your .zshrc
 ├── init_lib.zsh          # Core initialization utilities
 ├── ohm_banner            # ASCII art banner
@@ -74,6 +78,8 @@ echo 'source ~/ohm/init.zsh' >> ~/.zshrc
 source ~/.zshrc
 ```
 
+`init.zsh` adds `~/ohm/bin` to `PATH`, not the repo root. Top-level scripts remain repo-local implementation files unless wrapped in `bin/`.
+
 ### Verify Install
 
 ```zsh
@@ -89,7 +95,7 @@ ohm config init
 ### Launch the Menu
 
 ```zsh
-m   # Opens the interactive menu system
+ohm-menu   # Opens the interactive menu system
 ```
 
 ### Use Libraries in Your Scripts
@@ -204,7 +210,7 @@ typeset -a menu=(mi_hello mi_world)
 
 Run with:
 ```zsh
-MENU_FILE=~/my.mnu m
+MENU_FILE=~/my.mnu ohm-menu
 ```
 
 ## 🎨 Demos & Samples
