@@ -118,6 +118,7 @@ WriteXY 10 5 "Welcome to the future of terminal UIs"
 
 - Developer guide: [turbo_zsh/DEVELOPMENT.md](turbo_zsh/DEVELOPMENT.md)
 - Function docs use `ZDOC v1` tags for parsing: `#@fn`, `#@brief`, `#@args`, `#@ret`.
+- Planning and backlog tracking live in Linear; keep long-lived repo conventions in `AGENTS.md`.
 
 ## 📚 API Reference
 

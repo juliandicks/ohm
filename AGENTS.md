@@ -21,6 +21,7 @@ Preferred direction:
 - Generic top-level commands such as `config`, `services`, `sysinfo`, `spinner`, and `update` should move behind `ohm` subcommands over time.
 - `./setup` should remain repo-local, not a globally relied-on `PATH` command.
 - Prefer a small `bin/` directory with supported public entrypoints instead of adding the repo root to `PATH`.
+- Public planning and feature tracking live in Linear rather than a repo-local roadmap file.
 
 ## Directory Map
 
@@ -56,6 +57,13 @@ ohm/
 - `~/.zshenv` should source `init_env.zsh` so every Zsh invocation, including non-interactive shells and scripts, gets the basic `turbo_zsh` bootstrap functions.
 - Interactive/user shell startup should source `init.zsh`.
 - `init.zsh` is responsible for loading the user's global and machine-specific initialization from `user/`, including `init_${USER}` and `init_${USER}_${HOST%%.*}`.
+
+## Product Conventions
+
+- Treat `user/` as the supported user override layer; it is gitignored and intended for personal/global and host-specific customization.
+- Prefer reusable config-mutation helpers for persisted settings instead of ad hoc file edits in feature scripts.
+- Release-facing work should preserve a clean install/bootstrap story, documented public commands, and a stable `bin/` entrypoint surface.
+- Long-term release direction is closer to an Oh My Zsh-style distribution: polished install flow, supported customization model, and public docs/community hygiene.
 
 ## Naming Conventions
 
@@ -121,12 +129,8 @@ AssertStatus "$?" 0 "command succeeded"
 PrintTestSummary
 ```
 
-## Active Work (as of March 2026)
+## Planning
 
-- `config --spinner` script: first pass done, needs bug fixes and persistence (write to user config).
-- `config --theme` and `config --all` not yet implemented.
-- Command namespace cleanup: move generic top-level commands behind `ohm` subcommands.
-- Public `bin/` entrypoint layout is in progress; repo root scripts remain implementation files.
-- CI integration not yet set up.
-- Visual/integration tests not yet implemented.
-- `user/` is gitignored; next follow-up is templating/documenting the user config flow.
+- Linear is the source of truth for active roadmap items, launch work, and backlog tracking.
+- Keep durable technical conventions in this file and user-facing usage in `README.md`.
+- Avoid recreating a second roadmap document in the repo unless it captures stable reference material rather than task tracking.
