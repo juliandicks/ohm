@@ -1,0 +1,510 @@
+#!/bin/zsh
+# Summary: Show a system summary (host, CPU, memory, OS)
+# shellcheck disable=SC2155,SC2154
+
+source "${OHM_PATH:?run this as 'ohm sysinfo'}/init_env.zsh"
+
+uses system_lib.zsh
+uses crt_lib.zsh
+uses spinner_lib.zsh
+uses panel_lib.zsh
+uses string_lib.zsh
+
+get_computer_name() {
+  if command -v scutil &> /dev/null; then
+    scutil --get ComputerName 2>/dev/null || echo "Unknown Host"
+  elif command -v hostnamectl &> /dev/null; then
+    hostnamectl --static 2>/dev/null || echo "Unknown Host"
+  elif command -v hostname &> /dev/null; then
+    hostname 2>/dev/null || echo "Unknown Host"
+  else
+    echo "Unknown Host"
+  fi
+}
+
+get_cpu_model() {
+  local cpu_model
+
+  if IsMac; then
+    if command -v sysctl &>/dev/null; then
+      cpu_model=$(sysctl -n machdep.cpu.brand_string 2>/dev/null)
+    fi
+  elif IsLinux; then
+    if command -v lscpu &>/dev/null; then
+      cpu_model=$(lscpu 2>/dev/null | awk -F: '/Model name/{sub(/^[ \t]+/, "", $2); print $2; exit}')
+    elif [[ -r /proc/cpuinfo ]]; then
+      cpu_model=$(awk -F: '/model name/{sub(/^[ \t]+/, "", $2); print $2; exit}' /proc/cpuinfo)
+    fi
+  else
+    if [[ -r /proc/cpuinfo ]]; then
+      cpu_model=$(awk -F: '/model name/{sub(/^[ \t]+/, "", $2); print $2; exit}' /proc/cpuinfo)
+    fi
+  fi
+
+  echo "${cpu_model:-Unknown CPU}"
+}
+
+get_linux_os() {
+  local pretty_name
+  local hostctl_name
+  local os_name
+  local os_version
+  local os_version_id
+
+  [[ "$(uname)" == "Linux" ]] || { echo "This function only works on Linux."; return 1; }
+
+  if command -v hostnamectl &>/dev/null; then
+    hostctl_name=$(hostnamectl 2>/dev/null | awk -F': +' '/Operating System/{print $2; exit}')
+    if [[ -n "$hostctl_name" ]]; then
+      echo "$hostctl_name"
+      return 0
+    fi
+  fi
+
+  if [[ -r "/etc/os-release" ]]; then
+    pretty_name=$(awk -F= '/^PRETTY_NAME=/{gsub(/^"|"$/, "", $2); print $2; exit}' /etc/os-release)
+    if [[ -n "$pretty_name" ]]; then
+      echo "$pretty_name"
+      return 0
+    fi
+
+    os_name=$(awk -F= '/^NAME=/{gsub(/^"|"$/, "", $2); print $2; exit}' /etc/os-release)
+    os_version=$(awk -F= '/^VERSION=/{gsub(/^"|"$/, "", $2); print $2; exit}' /etc/os-release)
+    os_version_id=$(awk -F= '/^VERSION_ID=/{gsub(/^"|"$/, "", $2); print $2; exit}' /etc/os-release)
+
+    if [[ -n "$os_name" && -n "$os_version" ]]; then
+      echo "$os_name $os_version"
+      return 0
+    fi
+    if [[ -n "$os_name" && -n "$os_version_id" ]]; then
+      echo "$os_name $os_version_id"
+      return 0
+    fi
+    if [[ -n "$os_name" ]]; then
+      echo "$os_name"
+      return 0
+    fi
+  fi
+
+  if command -v lsb_release &>/dev/null; then
+    pretty_name=$(lsb_release -ds 2>/dev/null)
+    pretty_name=${pretty_name#\"}
+    pretty_name=${pretty_name%\"}
+    if [[ -n "$pretty_name" ]]; then
+      echo "$pretty_name"
+      return 0
+    fi
+  fi
+
+  uname -sr
+}
+
+get_macos_name() {
+  local major
+  local minor
+
+  [[ "$(uname)" != "Darwin" ]] && { echo "This function only works on macOS."; return 1; }
+
+  # Extract major and minor macOS version
+  IFS=. read -r major minor _ <<< "$(sw_vers -productVersion)"
+
+  # macOS version-to-name mapping
+  case "$major" in
+    26) echo "Tahoe" ;;
+    15) echo "Sequoia" ;;
+    14) echo "Sonoma" ;;
+    13) echo "Ventura" ;;
+    12) echo "Monterey" ;;
+    11) echo "Big Sur" ;;
+    10)
+      case "$minor" in
+        15) echo "Catalina" ;;
+        14) echo "Mojave" ;;
+        13) echo "High Sierra" ;;
+        12) echo "Sierra" ;;
+        11) echo "El Capitan" ;;
+        10) echo "Yosemite" ;;
+        9) echo "Mavericks" ;;
+        8) echo "Mountain Lion" ;;
+        7) echo "Lion" ;;
+        6) echo "Snow Leopard" ;;
+        5) echo "Leopard" ;;
+        4) echo "Tiger" ;;
+        3) echo "Panther" ;;
+        2) echo "Jaguar" ;;
+        1) echo "Puma" ;;
+        0) echo "Cheetah" ;;
+        *) echo "Unknown macOS version: $major.$minor" ;;
+      esac
+      ;;
+    *) echo "Unknown macOS version: $major" ;;
+  esac
+}
+
+get_macos_info() {
+  local product_version
+  [[ "$(uname)" != "Darwin" ]] && { echo "Unknown"; return 0; }
+
+  if command -v sw_vers &>/dev/null; then
+    product_version=$(sw_vers -productVersion 2>/dev/null)
+  fi
+  echo "macOS $(get_macos_name) ${product_version:-Unknown}"
+}
+
+get_os() {
+	if IsMac; then
+		get_macos_info
+	elif IsLinux; then
+		get_linux_os
+	else
+		echo "Unknown"
+	fi
+}
+
+get_core_counts() {
+	if IsMac; then
+		get_mac_core_counts
+	elif IsLinux; then
+		get_ubuntu_core_counts
+	else
+		echo "Unknown"
+	fi
+}
+
+get_mac_core_counts() {
+  local total_cores
+  local performance_cores
+  local efficiency_cores
+
+  if ! command -v sysctl &>/dev/null; then
+    echo "N/A"
+    return 0
+  fi
+
+  # Get total physical cores
+  total_cores=$(sysctl -n hw.physicalcpu 2>/dev/null)
+  total_cores=${total_cores:-N/A}
+  # Get performance cores (P-cores)
+  performance_cores=$(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || echo "N/A")
+  # Get efficiency cores (E-cores)
+  efficiency_cores=$(sysctl -n hw.perflevel1.physicalcpu 2>/dev/null || echo "N/A")
+  efficiency_cores=${efficiency_cores:-N/A}
+
+  # If efficiency and performance core counts are available, print them
+  if [[ "$efficiency_cores" != "N/A" && "$performance_cores" != "N/A" ]]; then
+    echo "${total_cores} (${performance_cores} performance and ${efficiency_cores} efficiency)"
+  else
+    echo $total_cores
+  fi
+}
+
+get_ubuntu_core_counts() {
+  local total_cores
+
+  if [[ -r /proc/cpuinfo ]]; then
+    total_cores=$(grep -c '^model name' /proc/cpuinfo 2>/dev/null)
+  fi
+  echo "${total_cores:-N/A}"
+}
+
+get_mac_memory() {
+  local total_mem_bytes
+  local page_size
+  local free_pages
+  local inactive_pages
+  local vmstat_out
+  local free_mem_bytes
+  local used_mem_bytes
+  local total_mem_gb
+  local used_mem_gb
+
+  if [[ "$(uname)" != "Darwin" ]]; then
+    echo "0.0 1"
+    return 0
+  fi
+  if ! command -v sysctl &>/dev/null || ! command -v vm_stat &>/dev/null; then
+    echo "0.0 1"
+    return 0
+  fi
+
+  # Get total memory in bytes
+  total_mem_bytes=$(sysctl -n hw.memsize 2>/dev/null)
+  total_mem_bytes=${total_mem_bytes:-0}
+
+  # Get free memory (inactive + free) from vm_stat (pages * page size)
+  vmstat_out=$(vm_stat 2>/dev/null)
+  read -r page_size free_pages inactive_pages < <(
+    awk '
+      /page size of/ {ps=$(NF-1)}
+      /Pages free/ {gsub(/\./, "", $3); fp=$3}
+      /Pages inactive/ {gsub(/\./, "", $3); ip=$3}
+      END {print ps+0, fp+0, ip+0}
+    ' <<< "$vmstat_out"
+  )
+  page_size=${page_size:-0}
+  free_pages=${free_pages:-0}
+  inactive_pages=${inactive_pages:-0}
+  free_mem_bytes=$(( (free_pages + inactive_pages) * page_size ))
+
+  # Calculate used memory
+  used_mem_bytes=$(( total_mem_bytes - free_mem_bytes ))
+
+  # Convert bytes to GB
+  total_mem_gb=$(awk "BEGIN {print $total_mem_bytes / 1073741824}")   # Convert to GB
+  used_mem_gb=$(awk "BEGIN {print $used_mem_bytes / 1073741824}")     # Convert to GB
+  total_mem_gb=${total_mem_gb:-1}
+  used_mem_gb=${used_mem_gb:-0}
+  (( ${total_mem_gb%.*} <= 0 )) && total_mem_gb=1
+
+  printf "%.1f %d" ${used_mem_gb} ${total_mem_gb}
+}
+
+get_ubuntu_memory() {
+  local total_mem_kb
+  local available_mem_kb
+  local used_mem_kb
+  local total_mem_gb
+  local used_mem_gb
+
+  if [[ "$(uname)" != "Linux" || ! -r /proc/meminfo ]]; then
+    echo "0.0 1"
+    return 0
+  fi
+
+  # Get total and available memory from /proc/meminfo (in KB)
+  read -r total_mem_kb available_mem_kb < <(
+    awk '
+      /MemTotal/ {t=$2}
+      /MemAvailable/ {a=$2}
+      END {print t+0, a+0}
+    ' /proc/meminfo
+  )
+  total_mem_kb=${total_mem_kb:-0}
+  available_mem_kb=${available_mem_kb:-0}
+
+  # Calculate used memory (total - available)
+  used_mem_kb=$((total_mem_kb - available_mem_kb))
+
+  # Convert KB to GB
+  total_mem_gb=$(awk "BEGIN {print $total_mem_kb / 1048576}")   # 1 GB = 1048576 KB
+  used_mem_gb=$(awk "BEGIN {print $used_mem_kb / 1048576}")
+  total_mem_gb=${total_mem_gb:-1}
+  used_mem_gb=${used_mem_gb:-0}
+  (( ${total_mem_gb%.*} <= 0 )) && total_mem_gb=1
+
+  printf "%.1f %d\n" ${used_mem_gb} ${total_mem_gb}
+}
+
+get_memory() {
+	if IsMac; then
+		get_mac_memory
+	elif IsLinux; then
+		get_ubuntu_memory
+	else
+		echo "0 1"
+	fi
+}
+
+get_swap_space() {
+  local swap_info
+  local swap_used_gb
+  local swap_total_gb
+  local swap_used_mb
+  local swap_total_mb
+  local swap_total_kb
+  local swap_free_kb
+  local swap_used_kb
+
+  if [[ "$(uname)" == "Darwin" ]]; then
+    if ! command -v sysctl &>/dev/null; then
+      echo "0.0 0"
+      return 0
+    fi
+    # macOS: Get swap usage from sysctl
+    swap_info=$(sysctl -n vm.swapusage 2>/dev/null)
+
+    if [[ -z "$swap_info" ]]; then
+      # No swap is allocated
+      swap_used_gb=0
+      swap_total_gb=0
+    else
+      # Extract 'used' and 'total' swap in MB
+      swap_used_mb=$(echo "$swap_info" | awk '{print $3}' | sed 's/[^0-9.]//g')
+      swap_total_mb=$(echo "$swap_info" | awk '{print $7}' | sed 's/[^0-9.]//g')
+
+      # Ensure zero values are properly set
+      swap_used_mb=${swap_used_mb:-0}
+      swap_total_mb=${swap_total_mb:-0}
+
+      # Convert MB to GB safely
+      swap_used_gb=$(awk "BEGIN {print $swap_used_mb / 1024}")
+      swap_total_gb=$(awk "BEGIN {print $swap_total_mb / 1024}")
+    fi
+
+  elif [[ -f "/proc/meminfo" ]]; then
+    # Linux: Get swap space from /proc/meminfo (in KB)
+    read -r swap_total_kb swap_free_kb < <(
+      awk '
+        /SwapTotal/ {t=$2}
+        /SwapFree/ {f=$2}
+        END {print t+0, f+0}
+      ' /proc/meminfo
+    )
+
+    # If no swap is allocated, set values to 0
+    swap_total_kb=${swap_total_kb:-0}
+    swap_free_kb=${swap_free_kb:-0}
+
+    # Calculate used swap (total - free)
+    swap_used_kb=$((swap_total_kb - swap_free_kb))
+
+    # Convert KB to GB safely
+    swap_total_gb=$(awk "BEGIN {print $swap_total_kb / 1048576}")
+    swap_used_gb=$(awk "BEGIN {print $swap_used_kb / 1048576}")
+
+  else
+    echo "0.0 0"
+    return 0
+  fi
+
+  printf "%.1f %.0f\n" "$swap_used_gb" "$swap_total_gb"
+}
+
+get_root_disk_space() {
+  local disk_info
+  local used_space
+  local total_space
+  local used_percentage
+  local percent_token
+
+  if IsMac; then
+    # macOS: Get disk usage using df
+    if command -v df &>/dev/null; then
+      disk_info=$(df -h / 2>/dev/null | awk 'NR==2 {print $3, $2, $5}')  # Extract "Used", "Total", "Percentage Used"
+    fi
+  elif IsLinux; then
+    # Linux: Get disk usage using df
+    if command -v df &>/dev/null; then
+      disk_info=$(df -h --output=used,size,pcent / 2>/dev/null | tail -n 1)  # Extract "Used", "Total", "Percentage Used"
+    fi
+  else
+    echo "N/A N/A 0"
+    return 0
+  fi
+  if [[ -z "${disk_info:-}" ]]; then
+    echo "N/A N/A 0"
+    return 0
+  fi
+
+  # Assign values to variables
+  read -r used_space total_space percent_token <<< "$disk_info"
+  used_percentage=${percent_token%\%}
+  used_percentage=${used_percentage//[^0-9]/}
+  used_space=${used_space:-N/A}
+  total_space=${total_space:-N/A}
+  used_percentage=${used_percentage:-0}
+
+  printf "%s %s %d\n" "$used_space" "$total_space" "$used_percentage"
+}
+
+draw_bar() {
+  local percent="${1:-0}"
+  local length="${2:-0}"
+  local filled_chars=0
+  local bar=""
+  local i
+
+  percent=${percent//[^0-9-]/}
+  length=${length//[^0-9]/}
+  [[ -z "$percent" ]] && percent=0
+  [[ -z "$length" ]] && length=0
+  (( percent < 0 )) && percent=0
+  (( percent > 100 )) && percent=100
+  (( length < 0 )) && length=0
+  filled_chars=$(( (percent * length) / 100 ))
+
+  for ((i=0; i<filled_chars; i++)); do
+    bar+="░"
+  done
+  for ((i=filled_chars; i<length; i++)); do
+    bar+=" "
+  done
+  print -n "|${bar}|"
+}
+
+pretty_print() {
+	CursorOff
+  SpinnerStart "Thinking..."
+
+	local hostname="$(get_computer_name)"
+	local cpu_model="$(get_cpu_model)"
+	local cpu_cores="$(get_core_counts)"
+	local os_info="$(get_os)"
+  local swapUsedG
+  local swapTotalG
+  local ramUsedG
+  local ramTotalG
+  local rootUsed
+  local rootTotal
+  local rootPerc
+	read -r swapUsedG swapTotalG < <(get_swap_space)
+	read -r ramUsedG ramTotalG < <(get_memory)
+	local ramUsedPerc=$(printf "%d" $((ramUsedG*100/ramTotalG)) )
+	local swapUsedPerc=0
+	if (( swapTotalG > 0 )); then
+	  swapUsedPerc=$(printf "%d" $((swapUsedG * 100 / swapTotalG)))
+	fi
+	read -r rootUsed rootTotal rootPerc < <(get_root_disk_space)
+
+	SpinnerStop
+
+	local E=$'\e' ramUsed swapUsed
+	printf -v ramUsed "%4.1f" "$ramUsedG"
+	printf -v swapUsed "%4.1f" "$swapUsedG"
+
+	# every row's content is exactly 60 columns (the panel is 66 wide)
+	PanelBegin 66 "System Information"
+	PanelSection "Computer"
+	PanelRow "    Computer Name: ${E}[1m$(PadRight "$hostname" 41)${E}[22m"
+	PanelRow " Operating System: ${E}[1m$(PadRight "$os_info" 41)${E}[22m"
+	PanelRow "             Chip: ${E}[1m$(PadRight "$cpu_model" 41)${E}[22m"
+	PanelRow "  Number of Cores: ${E}[1m$(PadRight "$cpu_cores" 41)${E}[22m"
+	PanelSection "Memory"
+	PanelRow "    RAM: ${E}[1m${ramUsed}G${E}[22m $(draw_bar $ramUsedPerc 36) ${E}[1m$(printf '%2d' "$ramTotalG")G${E}[22m"
+	PanelRow "   Swap: ${E}[1m${swapUsed}G${E}[22m $(draw_bar $swapUsedPerc 36) ${E}[1m$(printf '%2d' "$swapTotalG")G${E}[22m"
+	PanelSection "Disk"
+	PanelRow " root /: ${E}[1m$(printf '%5s' "$rootUsed")${E}[22m $(draw_bar $rootPerc 36) ${E}[1m$(printf '%5s' "$rootTotal")${E}[22m"
+	PanelEnd
+
+	CursorOn
+}
+
+show_help() {
+  cat <<EOF
+Usage: ohm sysinfo [OPTIONS]
+
+Options:
+  -h, --help    Show this help message and exit
+
+EOF
+}
+
+parse_options() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)
+        show_help
+        exit 0
+        ;;
+      *)
+        echo "Unknown option: $1" >&2
+        show_help
+        exit 1
+        ;;
+    esac
+  done
+}
+
+parse_options "$@"
+
+pretty_print

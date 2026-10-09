@@ -1,14 +1,18 @@
 #!/bin/zsh
 # shellcheck disable=SC2154,SC2086
 
-[[ -n "$TURBO_PATH" ]] || { print "🛑Script aborted. TURBO_ZSH missing."; exit 250; }
+# Self-bootstrapping: works with or without the ~/.zshenv hook.
+export OHM_PATH=${0:A:h}
+source "${OHM_PATH}/init_env.zsh" || { print -u2 "ohm: cannot load ${OHM_PATH}/init_env.zsh (is turbo_zsh installed? run ./setup)"; exit 250; }
 
 set -u
 
-OHM_PATH=${0:A:h}
+uses ohm_lib.zsh
+# Export persisted settings (e.g. the chosen spinner) so child commands inherit them.
+OhmLoadConfig
 
 info() {
-  printf "\e[93;44;1m Ω \e[97;22m%s\e[K\e[0m\n" "$1"
+  printf "\e[93;44;1m Ω \e[97;22m%s\e[K\e[0m\n" "$1"
 }
 
 ok() {
@@ -31,93 +35,324 @@ host_short() {
   fi
 }
 
+# --- doctor ------------------------------------------------------------------
+
+typeset -gi doctor_failed=0 doctor_warned=0
+
+check_warn() {
+  warn "$1"
+  (( doctor_warned++ ))
+  return 0
+}
+
+check_fail() {
+  err "$1"
+  (( doctor_failed++ ))
+  return 0
+}
+
+# Shell scripts in the public tree: ohm root, bin/, libexec/, the user.example/ templates
+# (sourced files with no shebang), and the turbo_zsh libs/tests/demos.
+doctor_script_files() {
+  local f first
+  for f in "${OHM_PATH}"/*(.N) "${OHM_PATH}"/bin/*(.N) "${OHM_PATH}"/libexec/*(.N) \
+           "${OHM_PATH}"/user.example/*(.N) "${TURBO_PATH}"/*.zsh(.N) "${TURBO_PATH}"/tests/*(.N) \
+           "${TURBO_PATH}"/scripts/*(.N) "${TURBO_PATH}"/demos/*(.N); do
+    first=$(head -n 1 "$f" 2>/dev/null)
+    if [[ "$f" == *.zsh || "$f" == "${OHM_PATH}"/user.example/* || "$first" == "#!/bin/zsh"* ]]; then
+      print -r -- "$f"
+    fi
+  done
+}
+
+check_syntax() {
+  local f bad=0 n=0
+  for f in ${(f)"$(doctor_script_files)"}; do
+    (( n++ ))
+    if ! zsh -n "$f" 2>/dev/null; then
+      check_fail "Syntax error in ${f#${OHM_PATH}/}"
+      (( bad++ ))
+    fi
+  done
+  (( bad == 0 )) && ok "syntax OK (${n} scripts)"
+  return 0
+}
+
+# Dangling references: scripts that source/exec a path, or `uses` a library, that no
+# longer exists. Unit tests cannot see these, and they are how entrypoints rot.
+check_references() {
+  local f ref target lib p found bad=0
+  for f in ${(f)"$(doctor_script_files)"}; do
+    # Only complete literal paths: a path that continues into another $expansion (for example
+    # libexec/ohm-${name}) cannot be checked statically, so the match must end on a delimiter.
+    for ref in ${(f)"$(grep -oE '\$\{?(OHM_PATH|OHM_ROOT|TURBO_PATH|0:A:h)\}?/[A-Za-z0-9_./-]+([^A-Za-z0-9_./$-]|$)' "$f" 2>/dev/null | sort -u)"}; do
+      ref=${ref%[^A-Za-z0-9_./-]}
+      case "$ref" in
+        *TURBO_PATH*) target="${TURBO_PATH}/${ref#*/}" ;;
+        *0:A:h*)      target="${f:h}/${ref#*/}" ;;
+        *)            target="${OHM_PATH}/${ref#*/}" ;;
+      esac
+      target="${target%.}"
+      # user/ is optional (it only exists once you create personal files)
+      [[ "$target" == "${OHM_PATH}/user" || "$target" == "${OHM_PATH}/user/"* ]] && continue
+      if [[ ! -e "$target" ]]; then
+        check_fail "${f#${OHM_PATH}/}: missing ${target#${OHM_PATH}/}"
+        (( bad++ ))
+      fi
+    done
+    for lib in ${(f)"$(grep -hoE '^[[:space:]]*uses[[:space:]]+[A-Za-z0-9_./-]+' "$f" 2>/dev/null | awk '{print $2}' | sort -u)"}; do
+      found=0
+      # Search the public roots, not USES_PATH: that array only exists if ~/.zshenv ran.
+      for p in "$TURBO_PATH" "$OHM_PATH"; do
+        [[ -f "$p/$lib" ]] && { found=1; break; }
+      done
+      if (( ! found )); then
+        check_fail "${f#${OHM_PATH}/}: uses ${lib}, not found in turbo_zsh or ohm"
+        (( bad++ ))
+      fi
+    done
+  done
+  (( bad == 0 )) && ok "no dangling references"
+  return 0
+}
+
+# ohm and turbo_zsh live in separate repos, so declare and compare an API level.
+check_turbo_contract() {
+  local have want
+  have=$(sed -nE 's/^export TURBO_API_VERSION=([0-9]+).*/\1/p' "${TURBO_PATH}/init_env.zsh" 2>/dev/null | head -n 1)
+  want=$(sed -nE 's/^export OHM_REQUIRES_TURBO=([0-9]+).*/\1/p' "${OHM_PATH}/version.zsh" 2>/dev/null | head -n 1)
+  if [[ -z "$have" ]]; then
+    check_fail "turbo_zsh predates API versioning (run 'ohm update')"
+  elif [[ -z "$want" ]]; then
+    check_fail "version.zsh does not declare OHM_REQUIRES_TURBO"
+  elif [[ "$have" == "$want" ]]; then
+    ok "turbo_zsh API ${have} matches ohm"
+  else
+    check_fail "turbo_zsh API ${have} but ohm requires ${want} (run 'ohm update')"
+  fi
+}
+
+# Run a command with no inherited environment and no user startup files (as in cron or CI).
+# ZDOTDIR points at an empty directory so scripts launched through a #! line cannot read ~/.zshenv.
+clean_env() {
+  env -i HOME="$HOME" PATH="$PATH" TERM="${TERM:-xterm}" ZDOTDIR=/var/empty "$@"
+}
+
+# The bootstrap must work without ~/.zshenv.
+check_clean_bootstrap() {
+  if clean_env zsh -f -c "
+      source '${OHM_PATH}/init_env.zsh' && uses crt_lib.zsh && uses ohm_lib.zsh
+    " >/dev/null 2>&1; then
+    ok "init_env.zsh bootstraps in a clean shell"
+  else
+    check_fail "init_env.zsh does not bootstrap in a clean shell"
+  fi
+}
+
+# Every libexec command must be executable and start in a clean environment.
+# `ohm help <cmd>` runs the command's own --help through the real dispatcher.
+check_commands() {
+  local f name bad=0 n=0
+  for f in "${OHM_PATH}"/libexec/ohm-*(.N); do
+    name=${${f:t}#ohm-}
+    (( n++ ))
+    if [[ ! -x "$f" ]]; then
+      check_fail "libexec/${f:t} is not executable"
+      (( bad++ ))
+    elif ! clean_env zsh -f "${OHM_PATH}/bin/ohm" help "$name" >/dev/null 2>&1; then
+      check_fail "'ohm ${name}' does not start in a clean environment"
+      (( bad++ ))
+    fi
+  done
+  (( bad == 0 )) && ok "all ${n} commands start in a clean environment"
+  return 0
+}
+
+# Plugins: every entry point must parse, and every command must start in a clean environment
+# (through the real dispatcher, with the plugin registered the way the caller registered it).
+check_plugins() {
+  local entry d f name pbad
+  for entry in "${(@s/:/)${OHM_PLUGIN_PATH:-}}"; do
+    [[ -n $entry && ! -d $entry ]] && check_warn "plugin path not found: ${entry}"
+  done
+  for d in ${(f)"$(OhmPluginDirs)"}; do
+    pbad=0
+    for f in "$d"/plugin.zsh "$d"/menu.zsh "$d"/libexec/ohm-*(N); do
+      [[ -f $f ]] || continue
+      if ! zsh -n "$f" 2>/dev/null; then
+        check_fail "plugin ${d:t}: syntax error in ${f#$d/}"
+        pbad=1
+      fi
+    done
+    for f in "$d"/libexec/ohm-*(.N); do
+      name=${${f:t}#ohm-}
+      [[ -x "${OHM_PATH}/libexec/ohm-${name}" ]] && continue   # shadowed: the core command wins
+      if [[ ! -x $f ]]; then
+        check_fail "plugin ${d:t}: libexec/${f:t} is not executable"
+        pbad=1
+      elif ! clean_env OHM_PLUGIN_PATH="${OHM_PLUGIN_PATH:-}" OHM_USER_PATH="${OHM_USER_PATH}" \
+             zsh -f "${OHM_PATH}/bin/ohm" help "$name" >/dev/null 2>&1; then
+        check_fail "'ohm ${name}' (plugin ${d:t}) does not start in a clean environment"
+        pbad=1
+      fi
+    done
+    (( pbad )) || ok "plugin ${d:t}"
+  done
+  return 0
+}
+
+# Host-specific files in user/ are keyed on a host name that macOS can change.
+check_user_layer() {
+  if [[ ! -d "$OHM_USER_PATH" ]]; then
+    printf "  [INFO] no user/ directory (optional; 'ohm config init' creates starter files)\n"
+    return 0
+  fi
+
+  local host
+  host=$(OhmHostId)
+  local -a hostfiles=("${OHM_USER_PATH}"/init_${USER}_*(N) "${OHM_USER_PATH}"/env_${USER}_*(N))
+  if (( ${#hostfiles} == 0 )); then
+    printf "  [INFO] no host-specific files in user/ (optional)\n"
+  elif [[ -e "${OHM_USER_PATH}/init_${USER}_${host}" || -e "${OHM_USER_PATH}/env_${USER}_${host}" ]]; then
+    ok "host-specific user files found for '${host}'"
+  else
+    local -a others=(${(u)${hostfiles:t}#*_${USER}_})
+    check_warn "user/ has files for other hosts (${(j:, :)others}) but none for '${host}'"
+    echo "       If this machine was renamed: ohm config set host <old name>"
+  fi
+}
+
+check_optional_tools() {
+  local t
+  for t in jq mise; do
+    if command -v "$t" >/dev/null 2>&1; then
+      ok "$t available (optional)"
+    else
+      printf "  [INFO] %s not found (optional)\n" "$t"
+    fi
+  done
+}
+
 doctor() {
-  local failed=0
-  local warned=0
+  doctor_failed=0
+  doctor_warned=0
   local zshrc="${HOME}/.zshrc"
   local hook="source ${OHM_PATH}/init.zsh"
 
   info "Doctor"
 
-  command -v zsh >/dev/null 2>&1 && ok "zsh available" || { err "zsh missing"; ((failed++)); }
-  command -v git >/dev/null 2>&1 && ok "git available" || { err "git missing"; ((failed++)); }
+  if command -v zsh >/dev/null 2>&1; then ok "zsh available"; else check_fail "zsh missing"; fi
+  if command -v git >/dev/null 2>&1; then ok "git available"; else check_fail "git missing"; fi
+  check_optional_tools
 
-  if [[ -f "${OHM_PATH}/init.zsh" ]]; then
-    ok "init.zsh present"
-  else
-    err "Missing init.zsh"
-    ((failed++))
-  fi
-
-  if [[ -d "${OHM_PATH}/menu_zsh" ]]; then
-    ok "menu_zsh present"
-  else
-    err "menu_zsh missing (run ./setup)"
-    ((failed++))
-  fi
-
-  local menu_launcher="${OHM_PATH}/menu_zsh/m"
-  if [[ -f "$menu_launcher" ]]; then
-    if [[ -x "$menu_launcher" ]]; then
-      ok "menu launcher executable"
+  local f
+  for f in init.zsh init_env.zsh; do
+    if [[ -f "${OHM_PATH}/${f}" ]]; then
+      ok "${f} present"
     else
-      warn "menu launcher not executable; fixing with chmod +x"
-      if chmod +x "$menu_launcher" 2>/dev/null; then
-        ok "Fixed menu launcher permissions"
-      else
-        err "Unable to set execute permission on $menu_launcher"
-        ((failed++))
-      fi
-      ((warned++))
+      check_fail "Missing ${f}"
     fi
-  else
-    err "Missing menu launcher: $menu_launcher"
-    ((failed++))
-  fi
+  done
 
-  if [[ -d "${OHM_PATH}/turbo_zsh" ]]; then
-    ok "turbo_zsh present"
-  else
-    err "turbo_zsh missing (run ./setup)"
-    ((failed++))
-  fi
+  local dep
+  for dep in turbo_zsh menu_zsh; do
+    if [[ -d "${OHM_PATH}/${dep}" ]]; then
+      ok "${dep} present"
+    else
+      check_fail "${dep} missing (run ./setup)"
+    fi
+  done
+
+  check_turbo_contract
+  check_clean_bootstrap
+  check_commands
+  check_plugins
+  check_syntax
+  check_references
+  check_user_layer
 
   if [[ -f "$zshrc" ]] && grep -Fq "$hook" "$zshrc"; then
     ok "shell hook present in ~/.zshrc"
   else
-    warn "shell hook missing from ~/.zshrc"
+    check_warn "shell hook missing from ~/.zshrc"
     echo "       Add: $hook"
-    ((warned++))
   fi
 
   local zshenv="${HOME}/.zshenv"
   local ohm_hook="source ${OHM_PATH}/init_env.zsh"
   if [[ -f "$zshenv" ]] && grep -Fq "$ohm_hook" "$zshenv"; then
-    ok "ohm env hook present in ~/.zshenv"
+    ok "ohm env hook present in ~/.zshenv (optional)"
   else
-    warn "ohm env hook missing from ~/.zshenv"
-    echo "       Add: $ohm_hook"
-    ((warned++))
+    # Commands and init.zsh bootstrap themselves; the hook only matters for your own
+    # scripts that call 'uses' without sourcing init.zsh.
+    printf "  [INFO] ~/.zshenv hook not installed (optional; add '%s' for scripts that call 'uses')\n" "$ohm_hook"
   fi
 
-  if (( failed > 0 )); then
-    err "Doctor found ${failed} failure(s), ${warned} warning(s)"
+  if [[ ":${PATH}:" == *":${OHM_PATH}/bin:"* ]]; then
+    ok "ohm bin directory on PATH"
+  else
+    check_warn "ohm bin directory is not on PATH (init.zsh adds it for interactive shells)"
+  fi
+
+  if (( doctor_failed > 0 )); then
+    err "Doctor found ${doctor_failed} failure(s), ${doctor_warned} warning(s)"
     return 1
   fi
 
-  info "Doctor Passed (${warned} warning(s))"
+  info "Doctor Passed (${doctor_warned} warning(s))"
 }
 
 show_help() {
   cat <<EOF
-Usage: ./ohm <command> [args]
+Usage: ohm <command> [args]
+       ohm help <command>
 
 Commands:
-  doctor          Validate install and configuration
-  config spinner  Configure default spinner style
+  doctor          Validate install, configuration and script integrity
   version         Print version information
-  help            Show this help
 EOF
+  # One line per libexec/ohm-<name>, described by its "# Summary:" header comment.
+  local f name summary
+  for f in "${OHM_PATH}"/libexec/ohm-*(.xN); do
+    name=${${f:t}#ohm-}
+    summary=$(sed -n '/^# Summary: /{s/^# Summary: *//p;q;}' "$f")
+    printf "  %-15s %s\n" "$name" "${summary:-(no description)}"
+  done
+  printf "  %-15s %s\n" help "Show this help, or a command's help"
+
+  # Commands added by plugins (a plugin can never replace a command listed above).
+  local d printed=0
+  for d in ${(f)"$(OhmPluginDirs)"}; do
+    for f in "$d"/libexec/ohm-*(.xN); do
+      name=${${f:t}#ohm-}
+      [[ -x "${OHM_PATH}/libexec/ohm-${name}" ]] && continue
+      (( printed )) || { printf "\nPlugin commands:\n"; printed=1; }
+      summary=$(sed -n '/^# Summary: /{s/^# Summary: *//p;q;}' "$f")
+      printf "  %-15s %s  [%s]\n" "$name" "${summary:-(no description)}" "${d:t}"
+    done
+  done
+}
+
+# git-style dispatch: `ohm foo args` runs libexec/ohm-foo with the same arguments. Core commands
+# come first; then plugin commands, in plugin order.
+run_command() {
+  local name=$1 d
+  shift
+  # The name becomes part of a path: only plain lowercase tokens are commands.
+  if [[ $name =~ '^[a-z][a-z0-9-]*$' ]]; then
+    if [[ -x "${OHM_PATH}/libexec/ohm-${name}" ]]; then
+      exec "${OHM_PATH}/libexec/ohm-${name}" "$@"
+    fi
+    for d in ${(f)"$(OhmPluginDirs)"}; do
+      if [[ -x "$d/libexec/ohm-${name}" ]]; then
+        export OHM_PLUGIN_DIR="${d:a}"
+        exec "$d/libexec/ohm-${name}" "$@"
+      fi
+    done
+  fi
+  err "Unknown command: $name" >&2
+  show_help >&2
+  return 1
 }
 
 main() {
@@ -126,19 +361,6 @@ main() {
     doctor)
       shift
       doctor "$@"
-      ;;
-    config)
-      shift
-      case "${1:-}" in
-        spinner|--spinner)
-          source "${OHM_PATH}/config" spinner
-          ;;
-        *)
-          err "Unknown config subcommand: ${1:-<none>}"
-          show_help
-          return 1
-          ;;
-      esac
       ;;
     version)
       if [[ -f "${OHM_PATH}/version.zsh" ]]; then
@@ -156,12 +378,14 @@ main() {
       fi
       ;;
     help|-h|--help)
-      show_help
+      case "${2:-}" in
+        ""|doctor|version|help) show_help ;;
+        *) run_command "$2" --help ;;
+      esac
       ;;
     *)
-      err "Unknown command: $cmd"
-      show_help
-      return 1
+      shift
+      run_command "$cmd" "$@"
       ;;
   esac
 }

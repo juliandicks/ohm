@@ -1,0 +1,236 @@
+#!/bin/zsh
+
+source "${0:A:h:h}/init_env.zsh"
+
+uses test_lib.zsh
+uses ohm_menu_lib.zsh
+
+TestSection "[menu providers]"
+
+HERE=${0:A:h}
+work=$(mktemp -d) || exit 1
+trap 'rm -rf "$work"' EXIT
+proj="${work:A}/project"
+mkdir -p "$proj"
+
+# A fake mise (and its task list for this project) first on PATH
+sed "s|/PROJECT|$proj|g" "$HERE/fixtures/mise_tasks.json" > "$work/tasks.json"
+export MISE_FAKE_JSON="$work/tasks.json" MISE_FAKE_LOG="$work/mise.log"
+export PATH="$HERE/fixtures/bin:$PATH"
+cd "$proj" || exit 1
+
+NotContains() { [[ "$1" != *"$2"* ]]; }
+# decode the stored command line of item $1 into words joined by |
+argv_of() { print -rn -- "${(j:|:)${(@Q)${(z)MENU_ARGV[$1]}}}"; }
+# index of the item with label $1 (and optional path $2)
+find_item() {
+  local i
+  for (( i = 1; i <= ${#MENU_LABEL}; i++ )); do
+    [[ ${MENU_LABEL[i]} == "$1" && ${MENU_PATH[i]} == "${2-}" ]] && { print -rn -- $i; return 0; }
+  done
+  return 1
+}
+
+if ! command -v jq >/dev/null 2>&1; then
+  print " ⚠️  jq not installed: skipping the mise provider tests"
+else
+
+# --- mise provider -----------------------------------------------------------------------------
+
+MenuReset; : > "$MISE_FAKE_LOG"
+OhmMenuMise
+AssertStatus "$?" 0 "OhmMenuMise succeeds"
+AssertTrue test ${#MENU_PATH} -gt 10 "tasks are added"
+
+i=$(find_item backup cluster/db)
+AssertTrue test -n "$i" "cluster:db:backup becomes item 'backup' in group cluster/db"
+AssertStringEquals "$(argv_of $i)" "mise|run|cluster:db:backup" "the item runs 'mise run <full task name>'"
+AssertStringEquals "${MENU_CWD[i]}" "$proj" "items run in the directory the menu was opened in"
+AssertStringEquals "${MENU_DESC[i]}" "Back up the cluster database" "the description comes from mise"
+i=$(find_item setup ""); AssertTrue test -n "$i" "a task without a namespace is a root item"
+AssertContains "${MENU_META[i]}" "Depends: db:up" "dependencies are shown in the details"
+AssertContains "${MENU_META[i]}" "Runs: mix setup" "the commands a task runs are shown in the details"
+i=$(find_item start ""); AssertContains "${MENU_META[i]}" "Runs: mise run db:up ⏎ mise run db:migrate ⏎ mix phx.server" "multi-step tasks list every step, separated by ⏎"
+AssertStringEquals "${MENU_SOURCE[$(find_item setup "")]}" "mise.toml" "the source is shown relative to the project"
+i=$(find_item setup assets); AssertContains "${MENU_META[i]}" "Directory: apps/web" "a task's own directory is shown relative to the project"
+
+AssertTrue test -z "$(find_item secret internal)" "hidden tasks are not listed"
+AssertStringEquals "${MENU_DESC[$(find_item nodesc "")]}" "" "a task without a description is still listed"
+
+# ordering: sorted by task name
+typeset -a names=()
+for (( n = 1; n <= ${#MENU_ARGV}; n++ )); do names+=("${${(@Q)${(z)MENU_ARGV[n]}}[3]}"); done
+AssertStringEquals "${(j:|:)names}" "${(j:|:)${(@o)names}}" "items are added in task-name order"
+
+# danger detection from names and descriptions
+AssertStringEquals "${MENU_DANGER[$(find_item destroy cluster)]}" "1" "cluster:destroy is dangerous"
+AssertStringEquals "${MENU_DANGER[$(find_item reset stack)]}" "1" "stack:reset is dangerous (its description says 'delete')"
+AssertStringEquals "${MENU_DANGER[$(find_item status cluster)]}" "0" "cluster:status is not dangerous"
+AssertStringEquals "${MENU_DANGER[$(find_item migrate db)]}" "0" "db:migrate is not dangerous"
+
+# tasks that take arguments
+AssertStringEquals "${MENU_ARGS[$(find_item deploy "")]}" "1" "a task with a usage spec prompts for arguments"
+AssertStringEquals "${MENU_ARGS[$(find_item setup "")]}" "0" "a task without one does not"
+
+# --- hostile input ---------------------------------------------------------------------------------
+
+AssertTrue test -z "$(find_item '-flag' "")" "a task whose name starts with '-' is skipped (mise would read it as an option)"
+AssertStringEquals "$(( ${MENU_LABEL[(I)*2J*]} ))" "0" "a task name containing an escape sequence is skipped"
+AssertContains "${(j: :)MENU_NOTICES}" "skipped 2 task(s)" "skipped tasks are reported"
+
+i=$(find_item 'a b;c' "")
+AssertTrue test -n "$i" "a name with a space and ; is kept"
+AssertStringEquals "$(argv_of $i)" "mise|run|a b;c" "...and reaches mise as ONE argument, never through a shell"
+
+i=$(find_item desc evil)
+AssertTrue test -n "$i" "a task whose description holds escapes is listed"
+AssertTrue NotContains "${MENU_DESC[i]}" $'\e' "...with the escape characters removed"
+AssertTrue NotContains "${MENU_DESC[i]}" $'\a' "...and the bell removed"
+AssertTrue NotContains "${MENU_DESC[i]}" $'\n' "...and newlines turned into spaces"
+AssertContains "${MENU_DESC[i]}" "and a newline" "...keeping the readable text"
+
+i=$(find_item 'path∕with∕slash' nested)
+AssertTrue test -n "$i" "a slash inside a task-name segment cannot create extra levels"
+AssertStringEquals "$(argv_of $i)" "mise|run|nested:path/with/slash" "...and the real name is still what runs"
+
+# --- all-monorepo flag, trust, failures ------------------------------------------------------------
+
+MenuReset; : > "$MISE_FAKE_LOG"
+OhmMenuMise --all
+AssertContains "$(cat $MISE_FAKE_LOG)" "tasks ls --json --all" "--all is passed through to mise"
+MenuReset; : > "$MISE_FAKE_LOG"
+OhmMenuMise
+AssertTrue NotContains "$(cat $MISE_FAKE_LOG)" "--all" "--all is not passed by default"
+
+MenuReset; : > "$MISE_FAKE_LOG"
+MISE_FAKE_MODE=untrusted OhmMenuMise
+AssertStringEquals "${#MENU_PATH}" "0" "an untrusted config yields no items"
+AssertContains "${(j: :)MENU_NOTICES}" "mise trust" "...and tells the user how to trust it"
+AssertTrue NotContains "$(cat $MISE_FAKE_LOG)" "trust" "the menu never runs 'mise trust' itself"
+AssertTrue NotContains "$(cat $MISE_FAKE_LOG)" "run " "...and never runs a task while listing"
+
+MenuReset
+MISE_FAKE_MODE=broken OhmMenuMise
+AssertStringEquals "${#MENU_PATH}" "0" "a failing mise yields no items"
+AssertContains "${(j: :)MENU_NOTICES}" "could not list tasks" "...and says so"
+AssertContains "${(j: :)MENU_NOTICES}" "something unexpected happened" "...including mise's own message"
+
+MenuReset
+MISE_FAKE_MODE=empty OhmMenuMise
+AssertStringEquals "${#MENU_PATH}${#MENU_NOTICES}" "00" "a project without tasks adds nothing and says nothing"
+
+fi   # jq
+
+# mise itself not installed: silently nothing
+if ! PATH=/usr/bin:/bin command -v mise >/dev/null 2>&1; then
+  MenuReset
+  PATH=/usr/bin:/bin OhmMenuMise
+  AssertStringEquals "${#MENU_PATH}${#MENU_NOTICES}" "00" "without mise the provider adds nothing and does not complain"
+fi
+
+# --- personal menu (user/m.mnu) ------------------------------------------------------------------------
+
+cat > "$work/m.mnu" <<EOF
+VENTURE_HOME="/home/example/venture"
+menuTitle="ignored"
+
+venSlack() { echo slack > "$work/slack.txt"; }
+venProxy() { echo proxy; }
+sysReboot() { echo "REBOOT"; }
+
+typeset -A mi_About=([l]=[𝕄] [k]=m [c]="_popup ./about.sh")
+typeset -A mnu_Venture=([l]=[V]enture [k]=v [c]="_cmd loadVentureMenu")
+typeset -A mnu_Sys=([l]=S[y]stem [k]=y [c]="_cmd loadSystemMenu")
+typeset -A mi_Slack=([l]="[S]lack Service*" [k]=s [c]="_cmd venSlack")
+typeset -A mi_Proxy=([l]="[P]roxy Server*" [k]=p [c]="_cmd venProxy --reload")
+typeset -A mi_Info=([l]="[S]ys Info" [k]=s [c]="_popup ohm sysinfo")
+typeset -A mi_Reboot=([l]="[R]eboot Now" [k]=r [c]="_cmd sysReboot")
+typeset -A mi_Chain=([l]="[C]hain" [k]=c [c]="_cmd echo one; touch $work/ran-at-load; echo two")
+typeset -A mi_Broken=([l]="Broken" [k]=b [c]="")
+
+typeset -a topMenu=(mi_About mnu_Venture mnu_Sys)
+typeset -a menu=()
+
+loadVentureMenu() { menuTitle="Venture"; menu=(mi_Slack mi_Proxy mi_Chain); return 255; }
+loadSystemMenu()  { menuTitle="System Tools"; menu=(mi_Info mi_Reboot mi_Broken nonexistent_entry); return 255; }
+loadVentureMenu
+EOF
+
+MenuReset
+MENU_FILE="$work/m.mnu" OhmMenuUser
+AssertStatus "$?" 0 "OhmMenuUser loads a legacy menu file"
+AssertTrue test ! -e "$work/ran-at-load" "loading a menu never runs its commands"
+AssertTrue test ! -e "$work/slack.txt" "...including loader-adjacent functions"
+
+MenuEntries ""
+AssertStringEquals "${(j:,:)MENU_ENTRY_TYPE}" "group,group,item" "top-level entries become groups (menu loaders) and items"
+AssertStringEquals "${(j:,:)MENU_ENTRY_LABEL[1,2]}" "Venture,System" "groups take their label from [l] with the [X] markup removed"
+AssertStringEquals "${MENU_ENTRY_KEY[1]}${MENU_ENTRY_KEY[2]}" "vy" "groups take their hotkey from [k]"
+
+MenuEntries Venture
+AssertStringEquals "${(j:,:)MENU_ENTRY_LABEL}" "Slack Service*,Proxy Server*,Chain" "a loader's items appear inside its group, in file order"
+AssertStringEquals "${(j:,:)MENU_ENTRY_KEY}" "s,p,c" "explicit item hotkeys are kept"
+i=${MENU_ENTRY_REF[2]}
+AssertStringEquals "$(argv_of $i)" "venProxy|--reload" "the command becomes argv without the _cmd/_popup prefix"
+i=${MENU_ENTRY_REF[1]}
+AssertStringEquals "$(argv_of $i)" "venSlack" "a function item is stored by name (it runs because the menu sourced the file)"
+i=${MENU_ENTRY_REF[3]}
+AssertStringEquals "$(argv_of $i)" "eval|echo one ; touch $work/ran-at-load ; echo two" "a command with shell operators runs through eval, explicitly"
+
+MenuEntries System
+AssertStringEquals "${(j:,:)MENU_ENTRY_LABEL}" "Sys Info,Reboot Now" "entries with no command or no definition are skipped"
+AssertStringEquals "$(argv_of ${MENU_ENTRY_REF[1]})" "ohm|sysinfo" "'_popup ohm sysinfo' becomes the argv (ohm sysinfo)"
+AssertStringEquals "${MENU_DANGER[${MENU_ENTRY_REF[2]}]}" "0" "'Reboot Now' is not matched by the danger words (add -D yourself if wanted)"
+
+MenuEntries ""
+AssertStringEquals "${MENU_ENTRY_LABEL[3]}" "𝕄" "a top-level action item keeps its label"
+
+# the file's own functions exist after loading, so items can run them
+AssertTrue IsFunctionDefined venSlack "the menu file's functions are available to run items"
+AssertStringEquals "$(( ${+VENTURE_HOME} ))" "1" "the menu file's variables are available to its functions"
+
+# paths under $HOME are shown with a literal ~, not expanded back
+mkdir -p "$work/home"
+cat > "$work/home/my.mnu" <<'MNU'
+typeset -A mi_a=([l]="[A]lpha" [k]=a [c]="_popup echo alpha")
+typeset -a topMenu=()
+typeset -a menu=(mi_a)
+MNU
+MenuReset
+HOME="$work/home" MENU_FILE="$work/home/my.mnu" OhmMenuUser
+AssertStringEquals "${MENU_SOURCE[1]}" "~/my.mnu" "a menu file under \$HOME is shown as ~/..."
+
+# a missing or invalid file
+MenuReset
+MENU_FILE="$work/does-not-exist" OhmMenuUser
+AssertStringEquals "${#MENU_PATH}${#MENU_NOTICES}" "00" "a missing personal menu adds nothing"
+print 'this is ( not valid zsh' > "$work/bad.mnu"
+MenuReset
+MENU_FILE="$work/bad.mnu" OhmMenuUser 2>/dev/null
+AssertStringEquals "${#MENU_PATH}" "0" "a personal menu that fails to load adds no items"
+
+# new format: no topMenu, items listed in `menu`
+cat > "$work/new.mnu" <<'EOF'
+typeset -A mi_a=([l]="[A]lpha" [k]=a [c]="_popup echo alpha")
+typeset -A mi_b=([l]="Beta" [c]="echo beta")
+typeset -a topMenu=()
+typeset -a menu=(mi_a mi_b)
+EOF
+MenuReset
+MENU_FILE="$work/new.mnu" OhmMenuUser
+MenuEntries ""
+AssertStringEquals "${(j:,:)MENU_ENTRY_LABEL}" "Alpha,Beta" "with no topMenu the items of \`menu\` are the root entries"
+AssertStringEquals "$(argv_of ${MENU_ENTRY_REF[2]})" "echo|beta" "a command without a _cmd/_popup prefix is used as is"
+
+# a hostile menu label cannot carry escapes onto the screen
+cat > "$work/hostile.mnu" <<'EOF'
+typeset -A mi_x=([l]=$'Ev\e]0;pwn\ail' [c]="echo hi")
+typeset -a topMenu=()
+typeset -a menu=(mi_x)
+EOF
+MenuReset
+MENU_FILE="$work/hostile.mnu" OhmMenuUser
+AssertTrue NotContains "${MENU_LABEL[1]}" $'\e' "escape characters in a menu label are removed"
+
+PrintTestSummary
+exit $?

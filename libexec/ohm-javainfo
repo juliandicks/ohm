@@ -1,0 +1,85 @@
+#!/bin/zsh
+# Summary: Show the Java environment (JAVA_HOME, java path and version)
+# shellcheck disable=SC2154,SC2086
+
+source "${OHM_PATH:?run this as 'ohm javainfo'}/init_env.zsh"
+
+uses alerts_lib.zsh
+uses crt_lib.zsh
+uses math_lib.zsh
+uses panel_lib.zsh
+uses string_lib.zsh
+
+pretty_print() {
+ 	CursorOff
+
+	local usedW=21
+	local maxW=$(( COLUMNS - usedW ))
+  local java_home=${JAVA_HOME:-Ⓧ Not Configured}
+	local java_path="Ⓧ Not Installed"
+	local java_version="Ⓧ Not Installed"
+  local java_cmd
+  local java_output
+
+  if command -v java >/dev/null 2>&1; then
+    java_cmd="$(command -v java 2>/dev/null)"
+    if [[ -n "$java_cmd" ]]; then
+      java_path="$java_cmd"
+    fi
+
+    java_output="$(java --version 2>&1)"
+    if [[ $? -eq 0 ]]; then
+      java_version="$(print -r -- "$java_output" | tail -n 1)"
+    elif [[ "$java_output" == *"Unable to locate a Java Runtime"* ]]; then
+      java_version="Ⓧ Not Installed"
+    else
+      java_version="Ⓧ Unavailable"
+    fi
+  fi
+
+	local maxStrW=$(Min $maxW $(Max ${#java_home} $(Max ${#java_path} ${#java_version} )))
+
+	# rows are "<11-column label><value>" and the panel frame adds 6 columns
+	local E=$'\e' W=$(( maxStrW + 17 ))
+	PanelBegin $W "Developer Environments"
+	PanelSection "Java"
+	PanelRow "JAVA_HOME: ${E}[1m$(PadRight "${java_home}" $maxStrW)${E}[22m"
+	PanelRow "     Path: ${E}[1m$(PadRight "${java_path}" $maxStrW)${E}[22m"
+	PanelRow "  Version: ${E}[1m$(PadRight "${java_version}" $maxStrW)${E}[22m"
+	PanelEnd
+
+	CursorOn
+}
+
+show_help() {
+  cat <<EOF
+Usage: ohm javainfo [OPTIONS]
+
+Options:
+  -h, --help    Show this help message and exit
+
+EOF
+}
+
+parse_options() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)
+        show_help
+        exit 0
+        ;;
+      *)
+        echo "Unknown option: $1" >&2
+        show_help
+        exit 1
+        ;;
+    esac
+  done
+}
+
+parse_options "$@"
+
+# After option parsing so --help works on any terminal.
+ExitIfColumnsLessThan 80
+
+pretty_print

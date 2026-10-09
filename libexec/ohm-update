@@ -1,0 +1,4 @@
+#!/bin/zsh
+# Summary: Pull the latest ohm, turbo_zsh and menu_zsh
+
+exec "${OHM_PATH:?run this as 'ohm update'}/setup" --update "$@"

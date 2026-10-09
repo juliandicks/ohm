@@ -8,6 +8,7 @@ DEPS=(menu_zsh turbo_zsh)
 MODE="install"
 ASSUME_YES=0
 EDIT_SHELL=1
+EDIT_ZSHENV=0
 OFFLINE=0
 
 info() {
@@ -43,7 +44,9 @@ Options:
   --update           Pull latest changes for existing git dependencies
   --offline          Do not use network operations (clone/pull/fetch)
   --yes, -y          Non-interactive; accept recommended prompts
-  --no-shell-edit    Do not modify ~/.zshrc
+  --no-shell-edit    Do not modify ~/.zshrc (or ~/.zshenv)
+  --zshenv           Also add the optional ~/.zshenv hook. Only needed for your own
+                     scripts that call 'uses' without sourcing ~/ohm/init.zsh
   -h, --help         Show this help
 
 Examples:
@@ -75,6 +78,10 @@ parse_options() {
         ;;
       --no-shell-edit)
         EDIT_SHELL=0
+        shift
+        ;;
+      --zshenv)
+        EDIT_ZSHENV=1
         shift
         ;;
       -h|--help)
@@ -159,6 +166,12 @@ pull_self_repo() {
   git -C "$target" pull --ff-only || return 1
 }
 
+# A dependency counts as present if it is a git checkout or a non-empty directory.
+dep_present() {
+  local target=$1
+  [[ -d "$target/.git" ]] || [[ -d "$target" && -n "$(ls -A "$target" 2>/dev/null)" ]]
+}
+
 ensure_dependencies() {
   info "Ensuring dependencies (${MODE})"
 
@@ -185,7 +198,7 @@ ensure_dependencies() {
         fi
         ;;
       install)
-        if [[ -d "$target/.git" || -d "$target" ]]; then
+        if dep_present "$target"; then
           info "$dep present"
         else
           clone_dep "$dep" || return 1
@@ -207,8 +220,6 @@ append_shell_hook() {
     return 0
   }
 
-  source ${MY_PATH}/init.zsh
-
   if ask_yes_no "Append ohm startup line to ${zshrc}?"; then
     printf "\n# ohm\n%s\n" "$hook_turbo" >> "$zshrc"
     info "Added shell hook_turbo to ${zshrc}"
@@ -219,7 +230,7 @@ append_shell_hook() {
 }
 
 configure_zshenv() {
-  (( EDIT_SHELL == 1 )) || return 0
+  (( EDIT_SHELL == 1 && EDIT_ZSHENV == 1 )) || return 0
 
   local zshenv="${HOME}/.zshenv"
   local hook_ohm="source ${MY_PATH}/init_env.zsh"
@@ -232,8 +243,6 @@ configure_zshenv() {
     return 0
   }
 
-  source ${MY_PATH}/init_env.zsh
-
   if ask_yes_no "Append ohm startup line to ${zshenv}?"; then
     printf "\n# ohm environment\n%s\n" "$hook_ohm" >> "$zshenv"
     info "Added ohm hook to ${zshenv}"
@@ -245,7 +254,7 @@ configure_zshenv() {
 
 run_doctor() {
   info "Running post-install checks"
-  "${MY_PATH}/ohm" doctor || return 1
+  "${MY_PATH}/ohm" doctor
 }
 
 main() {
@@ -253,11 +262,11 @@ main() {
   source "${MY_PATH}/ohm_banner"
   info "SETUP"
   preflight
-  ensure_dependencies
+  ensure_dependencies || { fail "Dependency setup failed; see messages above."; exit 1; }
   configure_zshenv
   append_shell_hook
-  run_doctor
-  info "Done. Restart shell and run: ohm-menu"
+  run_doctor || { fail "Setup finished, but ohm doctor found problems."; exit 1; }
+  info "Done. Restart your shell and run: ohm doctor"
 }
 
 main "$@"

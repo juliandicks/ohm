@@ -1,0 +1,8 @@
+# Sourced by init.zsh for your user on every machine.
+# Copied to user/init_<user> by `ohm config init`; edit freely, it is never overwritten.
+# shellcheck disable=SC2034
+
+# Aliases, exports and PATH changes that apply everywhere:
+# alias ll='ls -lah'
+# export EDITOR=nano
+# InsertPath "$HOME/.local/bin"

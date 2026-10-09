@@ -1,0 +1,15 @@
+# Per-machine data read by `ohm services`.
+# Copied to user/env_<user>_<host> by `ohm config init`; edit freely.
+# shellcheck disable=SC2034
+
+# Service name -> port. `ohm services` shows which of these ports are listening.
+declare -A SERVICE_LIST=(
+  [Example]="8080"
+)
+
+# Optional: named service sets, picked by `ohm services -c NAME` or by the directory you
+# run it from (first matching prefix of $PWD).
+# declare -A SERVICES_WEB=([App]="3000" [Postgres]="5432")
+# declare -A SERVICE_CONTEXTS=(
+#   [$HOME/code/web]=SERVICES_WEB
+# )

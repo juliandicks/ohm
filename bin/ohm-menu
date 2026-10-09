@@ -1,7 +1,5 @@
 #!/bin/zsh
+# Compatibility shim: the menu is now 'ohm menu'.
 
-SCRIPT_DIR=${0:A:h}
-OHM_ROOT=${SCRIPT_DIR:h}
-
-export OHM_PATH="$OHM_ROOT"
-exec "${OHM_ROOT}/m" "$@"
+export OHM_PATH=${0:A:h:h}
+exec "${OHM_PATH}/bin/ohm" menu "$@"

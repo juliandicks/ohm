@@ -1,7 +1,8 @@
 #!/bin/zsh
+# Summary: Show a live CPU usage graph in the terminal
 # shellcheck disable=SC2051,SC2079,SC2324,SC2128
 
-[[ -n "$TURBO_PATH" ]] || { print "🛑Script aborted. TURBO_ZSH missing."; exit 250; }
+source "${OHM_PATH:?run this as 'ohm cpu-graph'}/init_env.zsh"
 
 uses crt_lib.zsh
 
@@ -133,7 +134,7 @@ pieMap=(
 
 show_help() {
   cat <<EOF
-Usage: cpu_graph [OPTIONS]
+Usage: ohm cpu-graph [OPTIONS]
 
 Display a real-time CPU usage graph in the terminal.
 
@@ -150,10 +151,10 @@ Themes:
 Press any key to exit the graph display.
 
 Examples:
-  cpu_graph                    # Default: 32 width, dots theme
-  cpu_graph -w 64              # 64 character width
-  cpu_graph -t block           # Use block theme
-  cpu_graph -w 80 -t pie       # 80 width with pie theme
+  ohm cpu-graph                # Default: 32 width, dots theme
+  ohm cpu-graph -w 64          # 64 character width
+  ohm cpu-graph -t block       # Use block theme
+  ohm cpu-graph -w 80 -t pie   # 80 width with pie theme
 EOF
 }
 

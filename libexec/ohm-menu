@@ -1,0 +1,88 @@
+#!/bin/zsh
+# Summary: Open the popup menu: mise tasks for this directory plus your own menu items
+# shellcheck disable=SC2154
+
+source "${OHM_PATH:?run this as 'ohm menu'}/init_env.zsh"
+
+uses ohm_lib.zsh
+uses ohm_menu_lib.zsh
+
+show_help() {
+  cat <<EOF
+Usage: ohm menu [OPTIONS]
+
+Shows a menu of what you can do in the current directory:
+  - mise tasks (names like db:migrate become the group "db"; needs mise and jq)
+  - your own items from ${OHM_USER_PATH#${OHM_PATH}/}/m.mnu (see 'ohm config init')
+  - items from plugins that provide a menu.zsh (see 'ohm plugins')
+
+Keys: arrows move, Enter or a highlighted letter selects, Left or Esc goes back,
+/ searches, q quits. Tasks that look destructive ask for confirmation first.
+
+Options:
+  --print        Do not run anything: print the chosen command line (safe to paste or
+                 insert at the prompt, see OHM_MENU_KEY in the README)
+  --list         Print the whole menu as a text tree and exit (no terminal needed)
+  --dir DIR      Treat DIR as the project directory
+  --all          Include mise tasks from the whole monorepo
+  --no-mise      Leave out mise tasks
+  --no-user      Leave out your personal menu
+  --no-plugins   Leave out plugin items
+  -h, --help     Show this help
+EOF
+}
+
+mode=run list=0 all="" use_mise=1 use_user=1 use_plugins=1 dir=""
+while (( $# )); do
+  case "$1" in
+    -h|--help) show_help; exit 0 ;;
+    --print)   mode=--print ;;
+    --list)    list=1 ;;
+    --all)     all=--all ;;
+    --no-mise) use_mise=0 ;;
+    --no-user) use_user=0 ;;
+    --no-plugins) use_plugins=0 ;;
+    --dir)
+      [[ -n "${2:-}" ]] || { print -u2 "ohm menu: --dir needs a directory"; exit 2; }
+      dir=$2; shift ;;
+    *)
+      print -u2 "ohm menu: unknown option: $1"
+      show_help >&2
+      exit 2 ;;
+  esac
+  shift
+done
+
+if [[ -n $dir ]]; then
+  cd -- "$dir" 2>/dev/null || { print -u2 "ohm menu: cannot enter ${dir}"; exit 2; }
+fi
+
+# Items such as "ohm sysinfo" must resolve even when ohm's bin directory is not on PATH.
+AddPath "${OHM_PATH}/bin"
+
+MenuReset
+MENU_TITLE="Ωhm  ${PWD:t}"
+(( use_mise )) && OhmMenuMise $all
+(( use_user )) && OhmMenuUser
+(( use_plugins )) && OhmMenuPlugins
+
+if (( list )); then
+  MenuPrintTree
+  (( ${#MENU_NOTICES} )) && print -u2 -l -- "${MENU_NOTICES[@]}"
+  (( ${#MENU_PATH} )) || exit 1
+  exit 0
+fi
+
+MenuRun $mode
+rc=$?
+case $rc in
+  3)
+    print -u2 "ohm menu: nothing to show in ${PWD}."
+    (( ${#MENU_NOTICES} )) && print -u2 -l -- "${MENU_NOTICES[@]}"
+    print -u2 "Add a mise.toml with [tasks], or create your own items with 'ohm config init'."
+    exit 1 ;;
+  2)
+    print -u2 "ohm menu needs a terminal. Use 'ohm menu --list' to see the menu as text."
+    exit 2 ;;
+esac
+exit $rc

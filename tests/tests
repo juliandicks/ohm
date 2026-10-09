@@ -1,0 +1,40 @@
+#!/bin/zsh
+# Runs every ohm test suite. (turbo_zsh's own suites: zsh turbo_zsh/tests/tests)
+
+source "${0:A:h:h}/init_env.zsh"
+
+uses test_lib.zsh
+
+test_dir=${0:A:h}
+
+test_files=(
+  "$test_dir/menu_providers_test"
+  "$test_dir/menu_cli_test"
+  "$test_dir/menu_tui_test"
+  "$test_dir/config_cli_test"
+  "$test_dir/doctor_test"
+  "$test_dir/plugin_test"
+)
+
+total_failures=0
+
+for test_file in "${test_files[@]}"; do
+  if [[ -f "$test_file" ]]; then
+    "$test_file"
+    if [[ $? -ne 0 ]]; then
+      total_failures=$(( total_failures + 1 ))
+    fi
+  else
+    print " ⚠️ Test file not found: $test_file"
+    total_failures=$(( total_failures + 1 ))
+  fi
+done
+
+TestSection "Test Summary"
+if [[ $total_failures -eq 0 ]]; then
+  print " ✅ All test suites Passed!"
+  exit 0
+else
+  print " ❌ $total_failures test suite(s) Failed"
+  exit 1
+fi

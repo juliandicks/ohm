@@ -1,0 +1,566 @@
+[
+ {
+  "name": "setup",
+  "aliases": [],
+  "description": "Prepare dependencies and the local database",
+  "source": "/PROJECT/mise.toml",
+  "config_sources": [
+   "/PROJECT/mise.toml"
+  ],
+  "depends": [
+   "db:up"
+  ],
+  "depends_post": [],
+  "wait_for": [],
+  "env": [],
+  "dir": "/PROJECT",
+  "hide": false,
+  "global": false,
+  "raw": false,
+  "interactive": false,
+  "sources": [],
+  "outputs": [],
+  "shell": null,
+  "quiet": false,
+  "silent": false,
+  "tools": {},
+  "usage": "",
+  "timeout": null,
+  "run": [
+   "mix setup"
+  ],
+  "args": [],
+  "file": null
+ },
+ {
+  "name": "start",
+  "aliases": [],
+  "description": "Run migrations and start Phoenix",
+  "source": "/PROJECT/mise.toml",
+  "config_sources": [
+   "/PROJECT/mise.toml"
+  ],
+  "depends": [],
+  "depends_post": [],
+  "wait_for": [],
+  "env": [],
+  "dir": "/PROJECT",
+  "hide": false,
+  "global": false,
+  "raw": false,
+  "interactive": false,
+  "sources": [],
+  "outputs": [],
+  "shell": null,
+  "quiet": false,
+  "silent": false,
+  "tools": {},
+  "usage": "",
+  "timeout": null,
+  "run": [
+   "mise run db:up",
+   "mise run db:migrate",
+   "mix phx.server"
+  ],
+  "args": [],
+  "file": null
+ },
+ {
+  "name": "db:up",
+  "aliases": [],
+  "description": "Start the development PostgreSQL instance",
+  "source": "/PROJECT/mise.toml",
+  "config_sources": [
+   "/PROJECT/mise.toml"
+  ],
+  "depends": [],
+  "depends_post": [],
+  "wait_for": [],
+  "env": [],
+  "dir": "/PROJECT",
+  "hide": false,
+  "global": false,
+  "raw": false,
+  "interactive": false,
+  "sources": [],
+  "outputs": [],
+  "shell": null,
+  "quiet": false,
+  "silent": false,
+  "tools": {},
+  "usage": "",
+  "timeout": null,
+  "run": [
+   "docker compose up -d --wait postgres"
+  ],
+  "args": [],
+  "file": null
+ },
+ {
+  "name": "db:migrate",
+  "aliases": [],
+  "description": "Run database migrations",
+  "source": "/PROJECT/mise.toml",
+  "config_sources": [
+   "/PROJECT/mise.toml"
+  ],
+  "depends": [
+   "db:up"
+  ],
+  "depends_post": [],
+  "wait_for": [],
+  "env": [],
+  "dir": "/PROJECT",
+  "hide": false,
+  "global": false,
+  "raw": false,
+  "interactive": false,
+  "sources": [],
+  "outputs": [],
+  "shell": null,
+  "quiet": false,
+  "silent": false,
+  "tools": {},
+  "usage": "",
+  "timeout": null,
+  "run": [
+   "mix ecto.migrate"
+  ],
+  "args": [],
+  "file": null
+ },
+ {
+  "name": "db:down",
+  "aliases": [],
+  "description": "Stop the development PostgreSQL instance",
+  "source": "/PROJECT/mise.toml",
+  "config_sources": [
+   "/PROJECT/mise.toml"
+  ],
+  "depends": [],
+  "depends_post": [],
+  "wait_for": [],
+  "env": [],
+  "dir": "/PROJECT",
+  "hide": false,
+  "global": false,
+  "raw": false,
+  "interactive": false,
+  "sources": [],
+  "outputs": [],
+  "shell": null,
+  "quiet": false,
+  "silent": false,
+  "tools": {},
+  "usage": "",
+  "timeout": null,
+  "run": [
+   "docker compose down"
+  ],
+  "args": [],
+  "file": null
+ },
+ {
+  "name": "stack:reset",
+  "aliases": [],
+  "description": "Recreate the stack and delete its database volume",
+  "source": "/PROJECT/mise.toml",
+  "config_sources": [
+   "/PROJECT/mise.toml"
+  ],
+  "depends": [],
+  "depends_post": [],
+  "wait_for": [],
+  "env": [],
+  "dir": "/PROJECT",
+  "hide": false,
+  "global": false,
+  "raw": false,
+  "interactive": false,
+  "sources": [],
+  "outputs": [],
+  "shell": null,
+  "quiet": false,
+  "silent": false,
+  "tools": {},
+  "usage": "",
+  "timeout": null,
+  "run": [
+   "./scripts/reset.sh"
+  ],
+  "args": [],
+  "file": null
+ },
+ {
+  "name": "cluster:status",
+  "aliases": [],
+  "description": "Show local cluster pods",
+  "source": "/PROJECT/mise.toml",
+  "config_sources": [
+   "/PROJECT/mise.toml"
+  ],
+  "depends": [],
+  "depends_post": [],
+  "wait_for": [],
+  "env": [],
+  "dir": "/PROJECT",
+  "hide": false,
+  "global": false,
+  "raw": false,
+  "interactive": false,
+  "sources": [],
+  "outputs": [],
+  "shell": null,
+  "quiet": false,
+  "silent": false,
+  "tools": {},
+  "usage": "",
+  "timeout": null,
+  "run": [
+   "kubectl get pods"
+  ],
+  "args": [],
+  "file": null
+ },
+ {
+  "name": "cluster:destroy",
+  "aliases": [],
+  "description": "Permanently delete the local cluster VM and its data",
+  "source": "/PROJECT/mise.toml",
+  "config_sources": [
+   "/PROJECT/mise.toml"
+  ],
+  "depends": [],
+  "depends_post": [],
+  "wait_for": [],
+  "env": [],
+  "dir": "/PROJECT",
+  "hide": false,
+  "global": false,
+  "raw": false,
+  "interactive": false,
+  "sources": [],
+  "outputs": [],
+  "shell": null,
+  "quiet": false,
+  "silent": false,
+  "tools": {},
+  "usage": "",
+  "timeout": null,
+  "run": [
+   "infra/destroy.sh"
+  ],
+  "args": [],
+  "file": null
+ },
+ {
+  "name": "cluster:db:backup",
+  "aliases": [],
+  "description": "Back up the cluster database",
+  "source": "/PROJECT/mise.toml",
+  "config_sources": [
+   "/PROJECT/mise.toml"
+  ],
+  "depends": [],
+  "depends_post": [],
+  "wait_for": [],
+  "env": [],
+  "dir": "/PROJECT",
+  "hide": false,
+  "global": false,
+  "raw": false,
+  "interactive": false,
+  "sources": [],
+  "outputs": [],
+  "shell": null,
+  "quiet": false,
+  "silent": false,
+  "tools": {},
+  "usage": "",
+  "timeout": null,
+  "run": [
+   "infra/db/backup.sh"
+  ],
+  "args": [],
+  "file": null
+ },
+ {
+  "name": "assets:setup",
+  "aliases": [],
+  "description": "Install JavaScript dependencies",
+  "source": "/PROJECT/mise.toml",
+  "config_sources": [
+   "/PROJECT/mise.toml"
+  ],
+  "depends": [],
+  "depends_post": [],
+  "wait_for": [],
+  "env": [],
+  "dir": "/PROJECT/apps/web",
+  "hide": false,
+  "global": false,
+  "raw": false,
+  "interactive": false,
+  "sources": [],
+  "outputs": [],
+  "shell": null,
+  "quiet": false,
+  "silent": false,
+  "tools": {},
+  "usage": "",
+  "timeout": null,
+  "run": [
+   "mix assets.setup"
+  ],
+  "args": [],
+  "file": null
+ },
+ {
+  "name": "deploy",
+  "aliases": [],
+  "description": "Takes arguments",
+  "source": "/PROJECT/mise.toml",
+  "config_sources": [
+   "/PROJECT/mise.toml"
+  ],
+  "depends": [],
+  "depends_post": [],
+  "wait_for": [],
+  "env": [],
+  "dir": "/PROJECT",
+  "hide": false,
+  "global": false,
+  "raw": false,
+  "interactive": false,
+  "sources": [],
+  "outputs": [],
+  "shell": null,
+  "quiet": false,
+  "silent": false,
+  "tools": {},
+  "usage": "arg \"<env>\"",
+  "timeout": null,
+  "run": [
+   "./deploy"
+  ],
+  "args": [],
+  "file": null
+ },
+ {
+  "name": "internal:secret",
+  "aliases": [],
+  "description": "A hidden task",
+  "source": "/PROJECT/mise.toml",
+  "config_sources": [
+   "/PROJECT/mise.toml"
+  ],
+  "depends": [],
+  "depends_post": [],
+  "wait_for": [],
+  "env": [],
+  "dir": "/PROJECT",
+  "hide": true,
+  "global": false,
+  "raw": false,
+  "interactive": false,
+  "sources": [],
+  "outputs": [],
+  "shell": null,
+  "quiet": false,
+  "silent": false,
+  "tools": {},
+  "usage": "",
+  "timeout": null,
+  "run": [
+   "echo internal:secret"
+  ],
+  "args": [],
+  "file": null
+ },
+ {
+  "name": "nodesc",
+  "aliases": [],
+  "description": "",
+  "source": "/PROJECT/mise.toml",
+  "config_sources": [
+   "/PROJECT/mise.toml"
+  ],
+  "depends": [],
+  "depends_post": [],
+  "wait_for": [],
+  "env": [],
+  "dir": "/PROJECT",
+  "hide": false,
+  "global": false,
+  "raw": false,
+  "interactive": false,
+  "sources": [],
+  "outputs": [],
+  "shell": null,
+  "quiet": false,
+  "silent": false,
+  "tools": {},
+  "usage": "",
+  "timeout": null,
+  "run": [
+   "echo nodesc"
+  ],
+  "args": [],
+  "file": null
+ },
+ {
+  "name": "a b;c",
+  "aliases": [],
+  "description": "Name with a space and a semicolon",
+  "source": "/PROJECT/mise.toml",
+  "config_sources": [
+   "/PROJECT/mise.toml"
+  ],
+  "depends": [],
+  "depends_post": [],
+  "wait_for": [],
+  "env": [],
+  "dir": "/PROJECT",
+  "hide": false,
+  "global": false,
+  "raw": false,
+  "interactive": false,
+  "sources": [],
+  "outputs": [],
+  "shell": null,
+  "quiet": false,
+  "silent": false,
+  "tools": {},
+  "usage": "",
+  "timeout": null,
+  "run": [
+   "echo a b;c"
+  ],
+  "args": [],
+  "file": null
+ },
+ {
+  "name": "-flag",
+  "aliases": [],
+  "description": "Looks like an option",
+  "source": "/PROJECT/mise.toml",
+  "config_sources": [
+   "/PROJECT/mise.toml"
+  ],
+  "depends": [],
+  "depends_post": [],
+  "wait_for": [],
+  "env": [],
+  "dir": "/PROJECT",
+  "hide": false,
+  "global": false,
+  "raw": false,
+  "interactive": false,
+  "sources": [],
+  "outputs": [],
+  "shell": null,
+  "quiet": false,
+  "silent": false,
+  "tools": {},
+  "usage": "",
+  "timeout": null,
+  "run": [
+   "echo -flag"
+  ],
+  "args": [],
+  "file": null
+ },
+ {
+  "name": "bad\u001b[2Jname",
+  "aliases": [],
+  "description": "Name containing an escape sequence",
+  "source": "/PROJECT/mise.toml",
+  "config_sources": [
+   "/PROJECT/mise.toml"
+  ],
+  "depends": [],
+  "depends_post": [],
+  "wait_for": [],
+  "env": [],
+  "dir": "/PROJECT",
+  "hide": false,
+  "global": false,
+  "raw": false,
+  "interactive": false,
+  "sources": [],
+  "outputs": [],
+  "shell": null,
+  "quiet": false,
+  "silent": false,
+  "tools": {},
+  "usage": "",
+  "timeout": null,
+  "run": [
+   "echo bad\u001b[2Jname"
+  ],
+  "args": [],
+  "file": null
+ },
+ {
+  "name": "evil:desc",
+  "aliases": [],
+  "description": "Has \u001b]0;owned\u0007 escapes\tand a\ttab\nand a newline",
+  "source": "/PROJECT/mise.toml",
+  "config_sources": [
+   "/PROJECT/mise.toml"
+  ],
+  "depends": [],
+  "depends_post": [],
+  "wait_for": [],
+  "env": [],
+  "dir": "/PROJECT",
+  "hide": false,
+  "global": false,
+  "raw": false,
+  "interactive": false,
+  "sources": [],
+  "outputs": [],
+  "shell": null,
+  "quiet": false,
+  "silent": false,
+  "tools": {},
+  "usage": "",
+  "timeout": null,
+  "run": [
+   "echo evil:desc"
+  ],
+  "args": [],
+  "file": null
+ },
+ {
+  "name": "nested:path/with/slash",
+  "aliases": [],
+  "description": "Slash inside a segment",
+  "source": "/PROJECT/mise.toml",
+  "config_sources": [
+   "/PROJECT/mise.toml"
+  ],
+  "depends": [],
+  "depends_post": [],
+  "wait_for": [],
+  "env": [],
+  "dir": "/PROJECT",
+  "hide": false,
+  "global": false,
+  "raw": false,
+  "interactive": false,
+  "sources": [],
+  "outputs": [],
+  "shell": null,
+  "quiet": false,
+  "silent": false,
+  "tools": {},
+  "usage": "",
+  "timeout": null,
+  "run": [
+   "echo nested:path/with/slash"
+  ],
+  "args": [],
+  "file": null
+ }
+]

@@ -1,0 +1,302 @@
+#!/bin/zsh
+# Summary: Configure ohm (spinner picker, starter user files, settings)
+# shellcheck disable=SC2034,SC2154,SC2086
+
+source "${OHM_PATH:?run this as 'ohm config'}/init_env.zsh"
+
+uses crt_lib.zsh
+uses keys_lib.zsh
+uses spinner_lib.zsh
+uses string_lib.zsh
+uses ohm_lib.zsh
+
+# Reflect the persisted choice (if any) when the picker highlights the current default.
+OhmLoadConfig
+SpinnerSetDefault "${TURBO_SPINNER:-$SPINNER_DEFAULT}" 2>/dev/null
+ThemeSet "${TURBO_THEME:-classic}" 2>/dev/null
+
+# the picker's colours come from the theme
+_cfg_color() { SetColor ${THEME_FGN[$1]} ${THEME_BGN[$1]}; }
+
+config_spinner() {
+  SpinnerList
+  local total=${#SPINNER_LIST[@]}
+  local selected=1
+  local scroll_offset=0
+  local spinner_frame=1
+  local frame_tick=0
+  local confirmed=0
+
+  # Find index of current default
+  for (( i = 1; i <= total; i++ )); do
+    [[ "${SPINNER_LIST[$i]}" == "$SPINNER_DEFAULT" ]] && { selected=$i; break; }
+  done
+
+  # Layout calculations
+  local rows=$(GetRows)
+  local cols=$(GetCols)
+  local visible=$(( rows - 6 ))
+  (( visible > total )) && visible=$total
+  (( visible < 5 )) && { print "Terminal too small (need at least 11 rows)."; return 1; }
+
+  local box_w=44
+  local box_x=3
+  local box_y=2
+  local box_h=$(( visible + 3 ))
+  local list_x=$(( box_x + 1 ))
+  local list_y=$(( box_y + 1 ))
+
+  # Adjust scroll to keep selection visible
+  _cfg_adjust_scroll() {
+    (( selected - 1 < scroll_offset )) && scroll_offset=$(( selected - 1 ))
+    (( selected > scroll_offset + visible )) && scroll_offset=$(( selected - visible ))
+  }
+
+  # Draw static screen elements (called once)
+  _cfg_draw_chrome() {
+    _cfg_color panel
+    ClrScr
+
+    # Title bar
+    _cfg_color bar
+    GotoXY 1 1; ClrEol
+    Write "$(PadMiddle 'Configure Spinner' $cols)"
+
+    # Dialog box
+    _cfg_color panel
+    DrawDialogBox $box_x $box_y $box_w $box_h "Spinners"
+
+    # Footer
+    _cfg_color footer
+    GotoXY 1 $rows; ClrEol
+    Write " ↑↓ Navigate  Enter Accept  Esc Cancel"
+  }
+
+  CursorOff
+  _cfg_draw_chrome
+  _cfg_adjust_scroll
+
+  # Main loop
+  while true; do
+    # Draw visible spinner items
+    for (( vi = 1; vi <= visible; vi++ )); do
+      local idx=$(( scroll_offset + vi ))
+      local name="${SPINNER_LIST[$idx]}"
+      GotoXY $list_x $(( list_y + vi - 1 ))
+
+      if (( idx == selected )); then
+        _cfg_color selected
+        # Animate preview for selected spinner
+        local -a frames=("${(@P)name}")
+        local fcount=${#frames[@]}
+        local fidx=$(( (spinner_frame - 1) % fcount + 1 ))
+        printf " ▸ %-22s %s " "$name" "${frames[$fidx]}"
+      else
+        _cfg_color panel
+        if [[ "$name" == "$SPINNER_DEFAULT" ]]; then
+          printf "   %-22s ● " "$name"
+        else
+          printf "   %-22s   " "$name"
+        fi
+      fi
+    done
+
+    # Scroll indicators
+    _cfg_color panel
+    if (( scroll_offset > 0 )); then
+      WriteXY $(( box_x + box_w - 3 )) $list_y " ▲"
+    fi
+    if (( scroll_offset + visible < total )); then
+      WriteXY $(( box_x + box_w - 3 )) $(( list_y + visible - 1 )) " ▼"
+    fi
+
+    # Advance animation (every 2 ticks = 0.2s)
+    (( frame_tick++ ))
+    if (( frame_tick >= 2 )); then
+      (( spinner_frame++ ))
+      frame_tick=0
+    fi
+
+    # Read key with 0.1s timeout (allows animation)
+    local key=$(ReadLastKeyPress)
+    [[ -z "$key" ]] && continue
+
+    case "$key" in
+      "$KBD_UP_ARROW")
+        (( selected-- ))
+        (( selected < 1 )) && selected=$total
+        spinner_frame=1
+        _cfg_adjust_scroll
+        ;;
+      "$KBD_DN_ARROW")
+        (( selected++ ))
+        (( selected > total )) && selected=1
+        spinner_frame=1
+        _cfg_adjust_scroll
+        ;;
+      "$KBD_CR"|"$KBD_NL")
+        confirmed=1
+        break
+        ;;
+      "Esc")
+        break
+        ;;
+    esac
+  done
+
+  # Cleanup
+  ResetColor
+  CursorOn
+  ClrScr
+
+  if (( confirmed )); then
+    local chosen="${SPINNER_LIST[$selected]}"
+    SpinnerSetDefault "$chosen"
+    if OhmConfigSet spinner "$chosen"; then
+      print "Default spinner set to: $chosen (saved to ${OHM_USER_PATH}/config)"
+    else
+      print -u2 "Default spinner is $chosen for this session, but it could not be saved to ${OHM_USER_PATH}/config"
+      return 1
+    fi
+  else
+    print "Cancelled."
+  fi
+}
+
+# ohm config theme [NAME]: list the themes (with a live sample) or save one
+config_theme() {
+  local name=${1:-} t current
+  current=${TURBO_THEME:-classic}
+  if [[ -z $name ]]; then
+    for t in ${(f)"$(ThemeList)"}; do
+      printf '%s ' "$([[ $t == "$current" ]] && print '*' || print ' ')"
+      ThemeSample "$t"
+    done
+    print "\n* = current. Choose one with: ohm config theme NAME"
+    return 0
+  fi
+  ThemeIsValid "$name" || { print -u2 "Unknown theme '$name'. Available: ${(j:, :)${(f)"$(ThemeList)"}}"; return 2; }
+  if OhmConfigSet theme "$name"; then
+    ThemeSample "$name"
+    print "Theme set to ${name} (saved to ${OHM_USER_PATH}/config)."
+  else
+    print -u2 "Could not write ${OHM_USER_PATH}/config"
+    return 1
+  fi
+}
+
+# A plain token: safe to use inside a file name.
+_is_token() { [[ $1 =~ '^[A-Za-z0-9._-]+$' ]]; }
+
+# Create any missing starter files in user/ from user.example/, and pin this machine's
+# name so a hostname change (macOS renames machines on some networks) cannot silently
+# detach the host-specific files.
+config_init() {
+  local template="${OHM_PATH}/user.example"
+  local host
+  host=$(OhmHostId)
+
+  [[ -d $template ]] || { print -u2 "Missing template directory: $template"; return 1; }
+  _is_token "$USER" || { print -u2 "Cannot derive file names: unusual USER '$USER'"; return 1; }
+  _is_token "$host" || { print -u2 "Cannot derive file names: unusual host id '$host'"; return 1; }
+
+  mkdir -p -- "$OHM_USER_PATH" || return 1
+
+  local src name dst created=0 kept=0
+  for src in "$template"/*(.N); do
+    name=${src:t}
+    name=${name//USER/$USER}
+    name=${name//HOST/$host}
+    dst="${OHM_USER_PATH}/${name}"
+    if [[ -e $dst ]]; then
+      print "  kept     ${dst#${OHM_PATH}/}"
+      (( kept++ ))
+    else
+      cp -- "$src" "$dst" || return 1
+      print "  created  ${dst#${OHM_PATH}/}"
+      (( created++ ))
+    fi
+  done
+
+  if [[ -z "$(OhmConfigGet host)" ]]; then
+    OhmConfigSet host "$host" && print "  pinned   host=${host} (in ${OHM_USER_PATH#${OHM_PATH}/}/config)"
+  fi
+
+  print "Done: ${created} created, ${kept} kept. Existing files are never overwritten."
+}
+
+config_get() {
+  [[ -n "${1:-}" ]] || { print -u2 "Usage: ohm config get KEY"; return 2; }
+  local value
+  value=$(OhmConfigGet "$1") || return 1
+  print -r -- "$value"
+}
+
+config_set() {
+  [[ -n "${1:-}" && $# -ge 2 ]] || { print -u2 "Usage: ohm config set KEY VALUE"; return 2; }
+  local key=$1 value=$2
+  case "$key" in
+    spinner)
+      SpinnerIsValid "$value" || { print -u2 "Unknown spinner '$value' (see: ohm config spinner)"; return 2; }
+      ;;
+    theme)
+      ThemeIsValid "$value" || { print -u2 "Unknown theme '$value' (see: ohm config theme)"; return 2; }
+      ;;
+    host)
+      _is_token "$value" || { print -u2 "host must contain only letters, digits, '.', '_' and '-'"; return 2; }
+      ;;
+  esac
+  OhmConfigSet "$key" "$value"
+  case $? in
+    0) print "$key=$value" ;;
+    2) print -u2 "Invalid key or value (keys: letters, digits, '_', '.', '-'; values: one line)"; return 2 ;;
+    *) print -u2 "Could not write ${OHM_USER_PATH}/config"; return 1 ;;
+  esac
+}
+
+show_config_help() {
+  cat <<EOF
+Usage: ohm config <command>
+
+Commands:
+  spinner          Pick the default spinner style (saved to ${OHM_USER_PATH#${OHM_PATH}/}/config)
+  theme [NAME]     List the colour themes, or save one (classic, mono, green, amber)
+  init             Create missing starter files in ${OHM_USER_PATH#${OHM_PATH}/}/ and pin this host's name
+  get KEY          Print a saved setting
+  set KEY VALUE    Save a setting (spinner, theme, host, ...)
+  path             Print the config file location
+  -h, --help       Show this help
+EOF
+}
+
+case "${1:-}" in
+  --spinner|spinner)
+    config_spinner
+    ;;
+  theme)
+    shift
+    config_theme "$@"
+    ;;
+  init)
+    config_init
+    ;;
+  get)
+    shift
+    config_get "$@"
+    ;;
+  set)
+    shift
+    config_set "$@"
+    ;;
+  path)
+    print -r -- "${OHM_USER_PATH}/config"
+    ;;
+  --help|-h|help|"")
+    show_config_help
+    ;;
+  *)
+    print -u2 "Unknown config command: $1"
+    show_config_help >&2
+    exit 1
+    ;;
+esac

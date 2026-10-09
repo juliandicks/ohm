@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      # ohm clones turbo_zsh and menu_zsh next to itself (see setup.zsh); mirror that layout.
+      - uses: actions/checkout@v4
+        with:
+          path: ohm
+
+      - uses: actions/checkout@v4
+        with:
+          repository: juliandicks/turbo_zsh
+          path: ohm/turbo_zsh
+
+      - uses: actions/checkout@v4
+        with:
+          repository: juliandicks/menu_zsh
+          path: ohm/menu_zsh
+
+      - name: Install zsh, jq and tmux (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y zsh jq tmux
+
+      - name: Install jq and tmux (macOS)
+        if: runner.os == 'macOS'
+        run: brew install jq tmux
+
+      # No ~/.zshenv hook is installed on purpose: everything must bootstrap itself.
+      - name: turbo_zsh unit tests
+        run: zsh ohm/turbo_zsh/tests/tests
+
+      # Includes real-terminal tests driven through tmux, using a fake mise.
+      - name: ohm tests
+        run: zsh ohm/tests/tests
+
+      - name: ohm doctor
+        run: zsh ohm/ohm doctor

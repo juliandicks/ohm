@@ -1,0 +1,120 @@
+#!/bin/zsh
+
+source "${0:A:h:h}/init_env.zsh"
+
+uses test_lib.zsh
+
+TestSection "[ohm config]"
+
+OHM=${0:A:h:h}
+work=$(mktemp -d) || exit 1
+trap 'rm -rf "$work"' EXIT
+user="$work/user"
+
+# ohm_run <args>: a clean environment whose user directory is the scratch one
+ohm_run() {
+  env -i HOME="$HOME" PATH="$PATH" TERM=xterm USER="$USER" ZDOTDIR=/var/empty \
+    OHM_USER_PATH="$user" ${=extra_env} zsh -f "$OHM/bin/ohm" "$@"
+}
+extra_env=""
+
+AssertStringEquals "$(ohm_run config path)" "$user/config" "path honours OHM_USER_PATH"
+ohm_run config get spinner >/dev/null 2>&1
+AssertStatus "$?" 1 "get on a missing key exits 1"
+
+ohm_run config set spinner SPINNER_FA1 >/dev/null
+AssertStringEquals "$(ohm_run config get spinner)" "SPINNER_FA1" "set then get round-trips"
+AssertStringEquals "$(cat $user/config)" "spinner=SPINNER_FA1" "the config file holds KEY=value"
+
+ohm_run config set spinner SPINNER_BOGUS >/dev/null 2>&1;      AssertStatus "$?" 2 "set rejects an unknown spinner"
+ohm_run config set spinner 'SPINNER_3;touch x' >/dev/null 2>&1; AssertStatus "$?" 2 "set rejects a hostile spinner name"
+ohm_run config set host '../../etc' >/dev/null 2>&1;            AssertStatus "$?" 2 "set rejects a path-like host"
+ohm_run config set 'bad key' v >/dev/null 2>&1;                 AssertStatus "$?" 2 "set rejects a bad key"
+AssertStringEquals "$(ohm_run config get spinner)" "SPINNER_FA1" "rejected values are not written"
+
+# The saved spinner must reach a child command through the dispatcher (the original bug)
+tree="$work/tree"
+mkdir -p "$tree/libexec"
+cp "$OHM/ohm" "$OHM/init_env.zsh" "$OHM/ohm_lib.zsh" "$OHM/version.zsh" "$tree/"
+cp -R "$OHM/bin" "$tree/"
+ln -s "$OHM/turbo_zsh" "$tree/turbo_zsh"
+cat > "$tree/libexec/ohm-showspinner" <<'SCRIPT'
+#!/bin/zsh
+# Summary: print the spinner this command would use
+source "${OHM_PATH:?}/init_env.zsh"
+uses spinner_lib.zsh
+print -r -- "$SPINNER_DEFAULT"
+SCRIPT
+chmod +x "$tree/libexec/ohm-showspinner"
+show() { env -i HOME="$HOME" PATH="$PATH" TERM=xterm ZDOTDIR=/var/empty OHM_USER_PATH="$user" "$@" zsh -f "$tree/bin/ohm" showspinner; }
+AssertStringEquals "$(show env)" "SPINNER_FA1" "a saved spinner reaches a child command"
+AssertStringEquals "$(show env TURBO_SPINNER=SPINNER_HC1)" "SPINNER_HC1" "an environment variable overrides the saved setting"
+ohm_run config set spinner SPINNER_SNAKE >/dev/null
+AssertStringEquals "$(show env)" "SPINNER_SNAKE" "changing the setting takes effect on the next run"
+print 'spinner=GARBAGE' > "$user/config"
+AssertStringEquals "$(show env)" "SPINNER_3" "a stale or invalid saved name falls back safely"
+
+# themes: listed with samples, saved, validated, and inherited by child commands
+out=$(ohm_run config theme)
+AssertContains "$out" "classic" "config theme lists the themes"
+AssertContains "$out" "mono" "...all of them"
+AssertContains "$out" $'\e[30;107m' "...with a colour sample each"
+ohm_run config theme mono >/dev/null
+AssertStringEquals "$(ohm_run config get theme)" "mono" "config theme NAME saves the choice"
+ohm_run config theme nope >/dev/null 2>&1;      AssertStatus "$?" 2 "an unknown theme is rejected"
+ohm_run config set theme nope >/dev/null 2>&1;  AssertStatus "$?" 2 "config set theme validates too"
+ohm_run config set theme 'x; touch /tmp/pwned-theme' >/dev/null 2>&1; AssertStatus "$?" 2 "...and rejects a hostile value"
+AssertTrue test ! -e /tmp/pwned-theme "...without executing it"
+AssertStringEquals "$(ohm_run config get theme)" "mono" "rejected values are not saved"
+
+cat > "$tree/libexec/ohm-showtheme" <<'SCRIPT'
+#!/bin/zsh
+# Summary: print the theme this command would use
+source "${OHM_PATH:?}/init_env.zsh"
+uses crt_lib.zsh
+print -r -- "$THEME_NAME"
+SCRIPT
+chmod +x "$tree/libexec/ohm-showtheme"
+showtheme() { env -i HOME="$HOME" PATH="$PATH" TERM=xterm ZDOTDIR=/var/empty OHM_USER_PATH="$user" "$@" zsh -f "$tree/bin/ohm" showtheme; }
+AssertStringEquals "$(showtheme env)" "mono" "a saved theme reaches a child command"
+AssertStringEquals "$(showtheme env TURBO_THEME=green)" "green" "an environment variable overrides the saved theme"
+print 'theme=GARBAGE' > "$user/config"
+AssertStringEquals "$(showtheme env)" "classic" "a stale or invalid saved theme falls back to classic"
+rm -f "$user/config"
+
+# a theme defined as a file in user/themes/ is visible to the CLI and to child commands
+mkdir -p "$user/themes"
+cat > "$user/themes/ocean.zsh" <<'EOF'
+typeset -gA TURBO_THEME_ocean=(panel "BrightCyan Black" bar "Black Cyan")
+EOF
+AssertContains "$(ohm_run config theme)" "ocean" "config theme lists a theme defined in user/themes/"
+ohm_run config theme ocean >/dev/null
+AssertStringEquals "$(ohm_run config get theme)" "ocean" "...and can save it"
+AssertStringEquals "$(showtheme env)" "ocean" "a command run through ohm uses the user theme"
+rm -f "$user/config" "$user/themes/ocean.zsh"
+
+# init
+out=$(ohm_run config init)
+AssertStringEquals "$(print -r -- $out | grep -c '^  created')" "4" "init creates the four starter files"
+host=${HOST%%.*}
+AssertStringEquals "$(ohm_run config get host)" "$host" "init pins this machine's name"
+AssertTrue test -f "$user/init_${USER}" "init creates init_<user>"
+AssertTrue test -f "$user/init_${USER}_${host}" "init creates init_<user>_<host>"
+AssertTrue test -f "$user/env_${USER}_${host}" "init creates env_<user>_<host>"
+AssertTrue test -f "$user/m.mnu" "init creates m.mnu"
+print "edited" > "$user/m.mnu"
+out=$(ohm_run config init)
+AssertStringEquals "$(print -r -- $out | grep -c '^  created')" "0" "a second init creates nothing"
+AssertStringEquals "$(cat $user/m.mnu)" "edited" "...and never overwrites an existing file"
+bad=0; for f in "$user"/init_* "$user"/env_*; do zsh -n "$f" || (( bad++ )); done
+AssertStringEquals "$bad" "0" "the copied templates are valid zsh"
+
+# services: a missing env file is explained; --help works regardless
+extra_env="OHM_USER_PATH=$work/empty-user"
+msg="$(ohm_run services 2>&1 </dev/null | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g')"
+AssertContains "$msg" "ohm config init" "services without an env file points at 'ohm config init'"
+ohm_run services --help >/dev/null 2>&1
+AssertStatus "$?" 0 "services --help works without any env file"
+
+PrintTestSummary
+exit $?

@@ -5,6 +5,9 @@ export OHM_VERSION="0.1.0"
 export OHM_VERSION_DATE="2026-01-30"
 export OHM_VERSION_NAME="Genesis"
 
+# turbo_zsh API level this ohm needs (compared with TURBO_API_VERSION by `ohm doctor`)
+export OHM_REQUIRES_TURBO=4
+
 # Check if there are pending updates from upstream
 # Returns: 0 if up to date, 1 if updates available, 2 if unable to check
 OhmCheckUpdates() {
@@ -48,7 +51,7 @@ OhmVersion() {
   OhmCheckUpdates
   case $? in
     0) echo "  Updates: ✓ No" ;;
-    1) echo "  Updates: ✗ Updates available (run 'update')" ;;
+    1) echo "  Updates: ✗ Updates available (run 'ohm update')" ;;
     2) echo "  Updates: ? Unable to check" ;;
   esac
   echo ""

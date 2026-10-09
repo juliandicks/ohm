@@ -1,0 +1,96 @@
+#!/bin/zsh
+
+source "${0:A:h:h}/init_env.zsh"
+
+uses test_lib.zsh
+
+TestSection "[ohm menu: command line]"
+
+OHM=${0:A:h:h}
+HERE=${0:A:h}
+work=$(mktemp -d) || exit 1
+trap 'rm -rf "$work"' EXIT
+proj="${work:A}/project"
+empty="${work:A}/empty"
+mkdir -p "$proj" "$empty" "$work/user"
+sed "s|/PROJECT|$proj|g" "$HERE/fixtures/mise_tasks.json" > "$work/tasks.json"
+
+NotContains() { [[ "$1" != *"$2"* ]]; }
+
+# run `ohm <args>` in a clean environment with the fake mise first on PATH
+ohm_run() {
+  env -i HOME="$HOME" PATH="$HERE/fixtures/bin:$PATH" TERM=xterm-256color ZDOTDIR=/var/empty \
+    OHM_USER_PATH="$work/user" MISE_FAKE_JSON="$work/tasks.json" ${=extra_env} \
+    zsh -f "$OHM/bin/ohm" "$@"
+}
+
+AssertStringEquals "$(ohm_run help | grep -c '^  menu ')" "1" "ohm help lists the menu command"
+
+out=$(ohm_run menu --help 2>&1); rc=$?
+AssertStatus "$rc" 0 "ohm menu --help succeeds"
+AssertContains "$out" "Usage: ohm menu" "--help prints usage"
+AssertContains "$out" "--print" "--help documents --print"
+
+command -v jq >/dev/null 2>&1 || { print " ⚠️  jq not installed: skipping tests that need mise tasks"; PrintTestSummary; exit $?; }
+
+out=$(ohm_run menu --list --dir "$proj" --no-user 2>/dev/null); rc=$?
+AssertStatus "$rc" 0 "--list succeeds"
+AssertContains "$out" $'db/\n  down' "--list prints groups followed by their items"
+AssertContains "$out" "cluster/" "--list shows every group"
+AssertContains "$out" $'  db/\n    backup' "--list indents nested groups"
+AssertContains "$out" "destroy  Permanently delete the local cluster VM and its data  [!]" "--list marks risky items with [!]"
+AssertTrue NotContains "$out" "secret" "--list leaves out hidden tasks"
+AssertTrue NotContains "$out" $'\e' "--list output contains no escape characters"
+
+err=$(ohm_run menu --list --dir "$proj" --no-user 2>&1 >/dev/null)
+AssertContains "$err" "skipped 2 task(s)" "--list reports skipped tasks on stderr, not stdout"
+
+AssertTrue NotContains "$(ohm_run menu --list --dir "$proj" --no-mise 2>/dev/null)" "cluster/" "--no-mise leaves out mise tasks"
+ohm_run menu --list --dir "$proj" --no-mise >/dev/null 2>&1
+AssertStatus "$?" 1 "--list with nothing to show exits 1"
+
+cat > "$work/user/m.mnu" <<'EOF'
+typeset -A mi_hello=([l]="[H]ello" [k]=h [c]="_popup echo hello")
+typeset -a topMenu=()
+typeset -a menu=(mi_hello)
+EOF
+out=$(ohm_run menu --list --dir "$proj" 2>/dev/null)
+AssertContains "$out" "Hello" "the personal menu is included"
+AssertContains "$out" "cluster/" "...together with the mise tasks"
+AssertTrue NotContains "$(ohm_run menu --list --dir "$proj" --no-user 2>/dev/null)" "Hello" "--no-user leaves the personal menu out"
+AssertContains "$(ohm_run menu --list --dir "$empty" 2>/dev/null)" "Hello" "the personal menu is shown in a directory with no tasks"
+
+# nothing to show
+extra_env="MISE_FAKE_MODE=empty"
+rm -f "$work/user/m.mnu"
+out=$(ohm_run menu --dir "$empty" 2>&1); rc=$?
+AssertStatus "$rc" 1 "an empty menu exits 1"
+AssertContains "$out" "nothing to show" "...and explains why"
+AssertContains "$out" "ohm config init" "...and points at 'ohm config init'"
+extra_env=""
+
+# trust: tell the user, never trust on their behalf
+extra_env="MISE_FAKE_MODE=untrusted MISE_FAKE_LOG=$work/mise.log"
+out=$(ohm_run menu --list --dir "$proj" --no-user 2>&1)
+AssertContains "$out" "mise trust" "an untrusted mise config explains how to trust it"
+AssertTrue NotContains "$(cat $work/mise.log)" "trust " "...without running 'mise trust'"
+extra_env=""
+
+# bad usage
+ohm_run menu --bogus >/dev/null 2>&1;            AssertStatus "$?" 2 "an unknown option exits 2"
+ohm_run menu --dir >/dev/null 2>&1;              AssertStatus "$?" 2 "--dir without a value exits 2"
+ohm_run menu --dir "$work/nope" >/dev/null 2>&1; AssertStatus "$?" 2 "--dir with a missing directory exits 2"
+
+# the interactive modes need a terminal; only testable when this run has none
+if ! { : </dev/tty; } 2>/dev/null; then
+  out=$(ohm_run menu --dir "$proj" --no-user 2>&1); rc=$?
+  AssertStatus "$rc" 2 "without a terminal the interactive menu exits 2"
+  AssertContains "$out" "needs a terminal" "...and suggests --list"
+fi
+
+# the old launcher still works
+shim=$(env -i HOME="$HOME" PATH="$HERE/fixtures/bin:$PATH" ZDOTDIR=/var/empty OHM_USER_PATH="$work/user" MISE_FAKE_JSON="$work/tasks.json" zsh -f "$OHM/bin/ohm-menu" --list --dir "$proj" --no-user 2>/dev/null)
+AssertContains "$shim" "cluster/" "bin/ohm-menu forwards to 'ohm menu'"
+
+PrintTestSummary
+exit $?

@@ -1,0 +1,184 @@
+#!/bin/zsh
+
+source "${0:A:h:h}/init_env.zsh"
+
+uses test_lib.zsh
+uses ohm_lib.zsh
+
+TestSection "[plugins]"
+
+OHM=${0:A:h:h}
+HERE=${0:A:h}
+work=$(mktemp -d) || exit 1
+trap 'rm -rf "$work"' EXIT
+user="$work/user"
+plug="${work:A}/plugins/acme"
+mkdir -p "$plug/libexec" "$user/plugins"
+
+NotContains() { [[ "$1" != *"$2"* ]]; }
+
+# --- a sample plugin -------------------------------------------------------------------------------
+cat > "$plug/plugin.zsh" <<'EOF'
+ACME_INIT_COUNT=$(( ${ACME_INIT_COUNT:-0} + 1 ))
+ACME_SEEN_DIR=$OHM_PLUGIN_DIR
+ACME_SEEN_NAME=$OHM_PLUGIN_NAME
+EOF
+cat > "$plug/menu.zsh" <<'EOF'
+MenuGroup -p Acme -l Acme -k a -d "Acme tools"
+MenuAddItem -p Acme -l Deploy -d "Deploy acme" -s "plugin ${OHM_PLUGIN_NAME}" -- echo deploy
+MenuAddItem -p Acme -l "Wipe cache" -d "Delete the acme cache" -- echo wipe
+acme_fn() { echo "from acme_fn"; }
+MenuAddItem -p Acme -l Func -- acme_fn
+EOF
+cat > "$plug/libexec/ohm-greet" <<'EOF'
+#!/bin/zsh
+# Summary: Say hello from the acme plugin
+source "${OHM_PATH:?}/init_env.zsh"
+[[ ${1:-} == -h || ${1:-} == --help ]] && { print "Usage: ohm greet [NAME]"; exit 0; }
+print -r -- "hello ${1:-world} from ${OHM_PLUGIN_DIR:t}"
+EOF
+# a plugin command with a core command's name must never shadow it
+cat > "$plug/libexec/ohm-config" <<'EOF'
+#!/bin/zsh
+# Summary: SHADOWED
+print SHADOWED
+EOF
+chmod +x "$plug/libexec/ohm-greet" "$plug/libexec/ohm-config"
+
+# run `ohm <args>` in a clean environment (optionally with extra variables)
+ohm_run() {
+  env -i HOME="$HOME" PATH="$HERE/fixtures/bin:$PATH" TERM=xterm-256color ZDOTDIR=/var/empty \
+    OHM_USER_PATH="$user" MISE_FAKE_MODE=empty ${=extra_env} zsh -f "$OHM/bin/ohm" "$@"
+}
+extra_env=""
+
+# --- registration ---------------------------------------------------------------------------------------
+OHM_USER_PATH="$user"
+unset OHM_PLUGIN_PATH
+AssertStringEquals "$(OhmPluginDirs)" "" "with nothing registered there are no plugins"
+
+OhmPlugin "$plug/nope" 2>/dev/null
+AssertStatus "$?" 1 "registering a missing directory fails"
+
+OhmPlugin "$plug"
+AssertStatus "$?" 0 "OhmPlugin registers a plugin"
+AssertStringEquals "$OHM_PLUGIN_PATH" "$plug" "...by adding it to OHM_PLUGIN_PATH"
+AssertStringEquals "$(env | grep '^OHM_PLUGIN_PATH=' | cut -d= -f2)" "$plug" "...which is exported, so 'ohm' commands inherit it"
+AssertStringEquals "$ACME_INIT_COUNT" "1" "...and runs its plugin.zsh"
+AssertStringEquals "$ACME_SEEN_DIR" "$plug" "plugin.zsh sees OHM_PLUGIN_DIR"
+AssertStringEquals "$ACME_SEEN_NAME" "acme" "...and OHM_PLUGIN_NAME"
+OhmPlugin "$plug"
+AssertStringEquals "$OHM_PLUGIN_PATH" "$plug" "registering twice does not duplicate the entry"
+AssertStringEquals "$ACME_INIT_COUNT" "2" "...but plugin.zsh runs again (plugin.zsh must be safe to repeat)"
+AssertStringEquals "$(OhmPluginDirs)" "$plug" "OhmPluginDirs lists the plugin"
+
+# a plugin with nothing to load is harmless
+mkdir -p "$work/plugins/empty"
+OhmPlugin "$work/plugins/empty"
+AssertStatus "$?" 0 "a plugin directory with no entry points is accepted"
+AssertStringEquals "$(OhmPluginDirs | wc -l | tr -d ' ')" "2" "...and listed"
+
+# auto-discovery: drop a directory or a symlink into user/plugins
+unset OHM_PLUGIN_PATH
+ln -s "$plug" "$user/plugins/acme-link"
+AssertStringEquals "$(OhmPluginDirs)" "$user/plugins/acme-link" "a symlink in user/plugins is discovered"
+ACME_INIT_COUNT=0
+OhmLoadPlugins
+AssertStringEquals "$ACME_INIT_COUNT" "1" "OhmLoadPlugins runs plugin.zsh for dropped-in plugins"
+AssertStringEquals "$ACME_SEEN_NAME" "acme-link" "...with the link's name, not the target's"
+# the same plugin registered by path and by link is listed once
+OHM_PLUGIN_PATH="$plug"
+AssertStringEquals "$(OhmPluginDirs | wc -l | tr -d ' ')" "1" "a plugin reachable by path and by link is listed once"
+unset OHM_PLUGIN_PATH
+
+# --- commands ---------------------------------------------------------------------------------------------
+extra_env="OHM_PLUGIN_PATH=$plug"
+out=$(ohm_run greet there 2>&1); rc=$?
+AssertStatus "$rc" 0 "a plugin command runs through the dispatcher"
+AssertStringEquals "$out" "hello there from acme" "...with OHM_PLUGIN_DIR pointing at its plugin"
+AssertContains "$(ohm_run help greet)" "Usage: ohm greet" "ohm help <command> works for plugin commands"
+
+help_out=$(ohm_run help)
+AssertContains "$help_out" "Plugin commands:" "ohm help lists plugin commands separately"
+AssertContains "$help_out" "greet" "...including this one"
+AssertContains "$help_out" "Say hello from the acme plugin  [acme]" "...with its summary and plugin name"
+AssertTrue NotContains "$help_out" "SHADOWED" "a plugin command named like a core command is not listed"
+
+AssertTrue NotContains "$(ohm_run config path 2>&1)" "SHADOWED" "a core command wins over a plugin command with the same name"
+AssertStringEquals "$(ohm_run config path)" "$user/config" "...and still behaves as the core command"
+
+ohm_run nosuchthing >/dev/null 2>&1
+AssertStatus "$?" 1 "an unknown command still fails"
+
+# auto-discovery needs no environment variable at all
+extra_env=""
+AssertStringEquals "$(ohm_run greet world 2>&1)" "hello world from acme-link" "a plugin in user/plugins/ provides commands without any registration"
+rm -f "$user/plugins/acme-link"
+
+# --- ohm plugins ----------------------------------------------------------------------------------------------
+extra_env="OHM_PLUGIN_PATH=$plug"
+out=$(ohm_run plugins 2>&1); rc=$?
+AssertStatus "$rc" 0 "ohm plugins succeeds for healthy plugins"
+AssertContains "$out" "acme" "ohm plugins lists the plugin"
+AssertContains "$out" "plugin.zsh; menu.zsh; commands: config, greet" "...and what it provides"
+AssertContains "$out" "[ohm config is a core command and wins]" "...and warns about a shadowed name"
+AssertContains "$out" "$plug" "...and where it lives"
+extra_env=""
+out=$(ohm_run plugins 2>&1)
+AssertContains "$out" "No plugins registered" "ohm plugins says so when there are none"
+AssertContains "$out" "OhmPlugin" "...and how to add one"
+
+# --- menu ---------------------------------------------------------------------------------------------------------
+extra_env="OHM_PLUGIN_PATH=$plug"
+out=$(ohm_run menu --list --no-mise --no-user 2>/dev/null); rc=$?
+AssertStatus "$rc" 0 "ohm menu --list shows plugin items"
+AssertContains "$out" $'Acme/\n  Deploy  Deploy acme' "plugin menu items appear in their group"
+AssertContains "$out" "Wipe cache  Delete the acme cache  [!]" "...and risky ones are marked like any other"
+AssertTrue NotContains "$(ohm_run menu --list --no-mise --no-user --no-plugins 2>/dev/null)" "Acme" "--no-plugins leaves them out"
+
+# a failing plugin costs only its own items
+mkdir -p "$work/plugins/broken" "$work/plugins/fine"
+printf 'MenuAddItem -l Oops -- echo\nif [[ unterminated\n' > "$work/plugins/broken/menu.zsh"
+print 'MenuAddItem -l Fine -- echo fine' > "$work/plugins/fine/menu.zsh"
+extra_env="OHM_PLUGIN_PATH=$work/plugins/broken:$work/plugins/fine:$plug"
+out=$(ohm_run menu --list --no-mise --no-user 2>/dev/null)
+AssertContains "$out" "Fine" "a plugin after a broken one still loads"
+AssertContains "$out" "Acme/" "...and so does the one after that"
+err=$(ohm_run menu --list --no-mise --no-user 2>&1 >/dev/null)
+AssertContains "$err" "plugin broken: menu.zsh has a syntax error" "the broken plugin is named in a notice"
+
+# plugin functions are available when their items run (the menu process sourced menu.zsh)
+extra_env="OHM_PLUGIN_PATH=$plug"
+AssertTrue NotContains "$(ohm_run menu --list --no-mise --no-user 2>&1)" "command not found" "loading a plugin menu prints no errors"
+
+# --- doctor ----------------------------------------------------------------------------------------------------------
+tree="$work/tree"
+mkdir -p "$tree"
+cp "$OHM/ohm" "$OHM/init_env.zsh" "$OHM/init.zsh" "$OHM/ohm_lib.zsh" "$OHM/ohm_menu_lib.zsh" "$OHM/version.zsh" "$OHM/ohm_banner" "$OHM/setup" "$OHM/setup.zsh" "$tree/"
+cp -R "$OHM/bin" "$OHM/libexec" "$OHM/user.example" "$tree/"
+ln -s "$OHM/turbo_zsh" "$tree/turbo_zsh"
+ln -s "$OHM/menu_zsh" "$tree/menu_zsh"
+doctor() { OHM_USER_PATH="$user" OHM_PLUGIN_PATH="$1" zsh "$tree/ohm" doctor 2>&1 | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g'; }
+
+mkdir -p "$work/plugins/good/libexec"
+print 'MenuAddItem -l Ok -- true' > "$work/plugins/good/menu.zsh"
+printf '#!/bin/zsh\n# Summary: fine\nsource "${OHM_PATH:?}/init_env.zsh"\n[[ ${1:-} == --help ]] && print usage\n' > "$work/plugins/good/libexec/ohm-fine"
+chmod +x "$work/plugins/good/libexec/ohm-fine"
+out=$(doctor "$work/plugins/good")
+AssertContains "$out" "plugin good" "doctor lists a healthy plugin"
+AssertTrue NotContains "$out" "[FAIL]" "...and passes it"
+
+out=$(doctor "$work/plugins/broken")
+AssertContains "$out" "plugin broken" "doctor reports a plugin with a syntax error"
+AssertContains "$out" "[FAIL]" "...as a failure"
+
+printf '#!/bin/zsh\n# Summary: needs zshenv\n[[ -n "$TURBO_PATH" ]] || exit 250\nuses crt_lib.zsh\n' > "$work/plugins/good/libexec/ohm-needsenv"
+chmod +x "$work/plugins/good/libexec/ohm-needsenv"
+AssertContains "$(doctor "$work/plugins/good")" "'ohm needsenv' (plugin good) does not start in a clean environment" "doctor starts plugin commands in a clean environment too"
+rm -f "$work/plugins/good/libexec/ohm-needsenv"
+
+out=$(doctor "$work/plugins/nonexistent")
+AssertContains "$out" "plugin path not found" "doctor warns about an OHM_PLUGIN_PATH entry that does not exist"
+
+PrintTestSummary
+exit $?

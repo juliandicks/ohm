@@ -1,0 +1,220 @@
+#!/bin/zsh
+
+source "${0:A:h:h}/init_env.zsh"
+
+uses test_lib.zsh
+
+TestSection "[ohm menu: real terminal (tmux)]"
+
+if ! command -v tmux >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
+  print " ⚠️  tmux and jq are needed for the terminal tests: skipping"
+  PrintTestSummary
+  exit $?
+fi
+
+OHM=${0:A:h:h}
+HERE=${0:A:h}
+work=$(mktemp -d) || exit 1
+proj="${work:A}/project"
+mkdir -p "$proj" "$work/user"
+sed "s|/PROJECT|$proj|g" "$HERE/fixtures/mise_tasks.json" > "$work/tasks.json"
+
+SOCK=ohmtui$$
+tm() { tmux -L $SOCK -f /dev/null "$@"; }
+# kill-server is asynchronous: starting a new session straight after can hit the dying server.
+stop_server() {
+  local i
+  tm kill-server 2>/dev/null
+  for (( i = 0; i < 40; i++ )); do
+    tm list-sessions >/dev/null 2>&1 || return 0
+    sleep 0.1
+  done
+}
+trap 'stop_server; rm -rf "$work"' EXIT
+
+# The menu runs with NO LANG on purpose: it has to cope with a C locale by itself.
+# start <cols> <rows> <menu args...>; MISE_FAKE_* come from the caller's environment
+start() {
+  local cols=$1 rows=$2; shift 2
+  rm -f "$work/out" "$work/mise.out" "$work/rc"
+  stop_server
+  tm new-session -d -x $cols -y $rows \
+    "env -i HOME=$HOME PATH=$HERE/fixtures/bin:$PATH TERM=xterm-256color ZDOTDIR=/var/empty \
+       OHM_USER_PATH=$work/user MISE_FAKE_JSON=$work/tasks.json MISE_FAKE_OUT=$work/mise.out ${extra_env} \
+       zsh -f $OHM/bin/ohm menu --dir $proj --no-user $*; echo \$? > $work/rc; sleep 30"
+}
+screen() { tm capture-pane -p; }
+# wait_for <text> [seconds]: poll the screen until the text appears
+wait_for() {
+  local i n=$(( ${2:-5} * 10 ))
+  for (( i = 0; i < n; i++ )); do
+    screen | grep -qF -- "$1" && return 0
+    sleep 0.1
+  done
+  return 1
+}
+# gone <text> [seconds]: the text must disappear
+wait_gone() {
+  local i n=$(( ${2:-5} * 10 ))
+  for (( i = 0; i < n; i++ )); do
+    screen | grep -qF -- "$1" || return 0
+    sleep 0.1
+  done
+  return 1
+}
+keys() { local k; for k in "$@"; do tm send-keys "$k"; sleep 0.15; done; }
+on_screen() { screen | grep -qF -- "$1"; }
+NoText() { ! on_screen "$1"; }
+wait_file() { local i; for (( i = 0; i < 50; i++ )); do [[ -s $1 ]] && return 0; sleep 0.1; done; return 1; }
+
+extra_env=""
+
+# --- browsing ---------------------------------------------------------------------------------------
+start 100 28
+AssertTrue wait_for "Details" "a wide terminal shows the menu and the details pane"
+AssertTrue on_screen "cluster" "the root lists the task groups"
+AssertTrue on_screen "stack" "...all of them"
+AssertTrue NoText "secret" "hidden tasks are not shown"
+AssertTrue on_screen "Ωhm  project" "the title shows the project directory"
+
+keys d
+AssertTrue wait_for "› db" "a group's hotkey opens it (breadcrumb shows the group)"
+AssertTrue on_screen "migrate" "...and lists its items"
+AssertTrue wait_for "Stop the development PostgreSQL instance" "the details pane describes the selected item (the first one, 'down')"
+keys Down
+AssertTrue wait_for "Run database migrations" "...and follows the selection"
+AssertTrue on_screen "mise run db:migrate" "...showing the exact command"
+keys Left
+AssertTrue wait_gone "› db" "Left goes back up"
+
+# --- search ---------------------------------------------------------------------------------------------
+keys / m i g r
+AssertTrue wait_for "db › migrate" "typing after / searches every item"
+AssertTrue on_screen "/ migr" "...and shows the query in the footer"
+keys Escape
+AssertTrue wait_gone "db › migrate" "Esc clears the search"
+
+# --- a risky task: confirm first ----------------------------------------------------------------------------
+keys c e
+AssertTrue wait_for "Run 'destroy'?" "a destructive task asks for confirmation"
+AssertTrue on_screen "mise run cluster:destroy" "...showing the command it would run"
+keys n
+AssertTrue wait_for "Cancelled" "answering n cancels"
+sleep 0.4
+AssertTrue test ! -e "$work/mise.out" "...and nothing ran"
+keys e y
+AssertTrue wait_for "Press any key to return" "answering y runs it on the normal screen"
+AssertTrue wait_file "$work/mise.out" "the task was run"
+AssertStringEquals "$(cat $work/mise.out)" "ran: cluster:destroy" "...through 'mise run <task>'"
+AssertTrue on_screen "✔ done" "...and reports success"
+keys x
+AssertTrue wait_for "Details" "any key returns to the menu"
+AssertTrue on_screen "› cluster" "...in the same place"
+
+# --- an ordinary task -------------------------------------------------------------------------------------------
+stop_server
+start 100 28
+wait_for "Details" >/dev/null
+keys d u
+AssertTrue wait_for "fake mise ran db:up" "an ordinary task runs without confirmation"
+keys x q
+AssertTrue wait_file "$work/rc" "q ends the menu"
+AssertStringEquals "$(cat $work/rc)" "0" "...with status 0"
+
+# --- a failing task ------------------------------------------------------------------------------------------------
+extra_env="MISE_FAKE_RUN_STATUS=3 MISE_FAKE_RUN_STDERR=TASK-ERROR-OUTPUT"
+start 100 28
+wait_for "Details" >/dev/null
+keys d u
+AssertTrue wait_for "exit status 3" "a failing task shows its exit status"
+AssertTrue on_screen "TASK-ERROR-OUTPUT" "...and what the task wrote to stderr (it must not be swallowed while the menu is open)"
+keys x
+AssertTrue wait_for "exited with status 3" "...and the menu remembers it"
+extra_env=""
+
+# --- --print: nothing runs; the command line comes back on stdout -------------------------------------------------------
+start 100 28 --print
+wait_for "Details" >/dev/null
+keys d m
+AssertTrue wait_file "$work/rc" "--print ends after a selection"
+AssertStringEquals "$(cat $work/rc)" "0" "...with status 0"
+sleep 0.3
+AssertTrue NoText "fake mise ran" "...without running the task"
+AssertTrue test ! -e "$work/mise.out" "...(mise was not asked to run anything)"
+
+# stdout of --print goes to the caller, not the screen
+rm -f "$work/printed"
+stop_server
+tm new-session -d -x 100 -y 28 \
+  "env -i HOME=$HOME PATH=$HERE/fixtures/bin:$PATH TERM=xterm-256color ZDOTDIR=/var/empty OHM_USER_PATH=$work/user MISE_FAKE_JSON=$work/tasks.json zsh -f $OHM/bin/ohm menu --dir $proj --no-user --print > $work/printed; echo \$? > $work/rc2; sleep 30"
+sleep 1.2
+keys c
+AssertTrue wait_for "› cluster" "(opened the cluster group)"
+sleep 0.3
+AssertStringEquals "$(cat $work/printed 2>/dev/null)" "" "--print writes nothing while the menu is open"
+keys e
+AssertTrue wait_file "$work/printed" "--print writes the choice to stdout"
+AssertStringEquals "$(cat $work/printed)" "mise run cluster:destroy" "...as a ready-to-paste command line (nothing was confirmed or run)"
+
+# cancelling with Esc at the top level prints nothing and exits 1
+stop_server; rm -f "$work/rc2" "$work/printed"
+tm new-session -d -x 100 -y 28 \
+  "env -i HOME=$HOME PATH=$HERE/fixtures/bin:$PATH TERM=xterm-256color ZDOTDIR=/var/empty OHM_USER_PATH=$work/user MISE_FAKE_JSON=$work/tasks.json zsh -f $OHM/bin/ohm menu --dir $proj --no-user --print > $work/printed; echo \$? > $work/rc2; sleep 30"
+sleep 1.2
+keys Escape
+AssertTrue wait_file "$work/rc2" "Esc at the top level ends the menu"
+AssertStringEquals "$(cat $work/rc2)" "1" "--print exits 1 when nothing was chosen"
+AssertStringEquals "$(cat $work/printed 2>/dev/null)" "" "...and prints nothing"
+
+# --- the terminal is left clean --------------------------------------------------------------------------------------------
+stop_server
+tm new-session -d -x 100 -y 12 "echo BEFORE-MENU; env -i HOME=$HOME PATH=$HERE/fixtures/bin:$PATH TERM=xterm-256color ZDOTDIR=/var/empty OHM_USER_PATH=$work/user MISE_FAKE_JSON=$work/tasks.json zsh -f $OHM/bin/ohm menu --dir $proj --no-user; echo AFTER-MENU; stty -a | tr ' ' '\n' | grep -E '^-?echo\$' | head -1; sleep 30"
+sleep 1.2
+keys q
+AssertTrue wait_for "AFTER-MENU" "quitting returns to the shell"
+AssertTrue on_screen "BEFORE-MENU" "the screen from before the menu is restored (alternate screen)"
+AssertTrue NoText "Details" "...with no menu left on it"
+AssertStringEquals "$(screen | grep -E '^-?echo$' | head -1)" "echo" "...and terminal echo is back on"
+
+# --- the prompt widget (OHM_MENU_KEY) -------------------------------------------------------------------------------------
+# A real interactive zsh: Ctrl-G opens the menu, the choice lands on the command line without running.
+stop_server; rm -f "$work/mise.out"
+tm new-session -d -x 100 -y 28 \
+  "env -i HOME=$HOME PATH=$HERE/fixtures/bin:$PATH TERM=xterm-256color ZDOTDIR=/var/empty OHM_USER_PATH=$work/user MISE_FAKE_JSON=$work/tasks.json MISE_FAKE_OUT=$work/mise.out OHM_MENU_KEY='^G' zsh -f -i"
+sleep 1.0
+tm send-keys -l "PS1='READY> '"; tm send-keys Enter; sleep 0.3
+tm send-keys -l "source $OHM/init.zsh"; tm send-keys Enter; sleep 0.8
+tm send-keys -l "cd $proj"; tm send-keys Enter; sleep 0.4
+AssertTrue wait_for "READY>" "an interactive shell with ohm loaded is ready"
+tm send-keys C-g
+AssertTrue wait_for "Details" "the key bound in OHM_MENU_KEY opens the menu from the prompt"
+keys d m
+AssertTrue wait_for "READY> mise run db:migrate" "the chosen command is placed on the prompt"
+AssertTrue NoText "Details" "...and the menu is gone"
+sleep 0.4
+AssertTrue test ! -e "$work/mise.out" "...without having been run"
+keys Enter
+AssertTrue wait_for "fake mise ran db:migrate" "pressing Enter runs it like any command you typed"
+
+# Esc leaves the prompt untouched
+tm send-keys C-g
+wait_for "Details" >/dev/null
+keys Escape
+AssertTrue wait_gone "Details" "Esc closes the menu again"
+AssertTrue on_screen "READY>" "...back at a normal prompt"
+
+# --- resizing -----------------------------------------------------------------------------------------------------------------
+stop_server
+start 100 28
+wait_for "Details" >/dev/null
+tm resize-window -x 60 -y 18
+AssertTrue wait_gone "Details" "shrinking the terminal redraws without the details pane"
+tm resize-window -x 110 -y 30
+AssertTrue wait_for "Details" "growing it brings the details pane back"
+tm resize-window -x 40 -y 8
+AssertTrue wait_for "Too small" "a tiny terminal gets a clear message"
+tm resize-window -x 100 -y 28
+AssertTrue wait_for "Details" "...and the menu recovers"
+
+PrintTestSummary
+exit $?

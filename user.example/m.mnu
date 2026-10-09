@@ -1,0 +1,13 @@
+# Your own items for `ohm menu`, shown in every directory next to that directory's mise tasks.
+# Copied to user/m.mnu by `ohm config init`; edit freely (see "Creating Custom Menus" in the README).
+# shellcheck disable=SC2034
+
+menuTitle="My Menu"
+
+# Items: [l]=label ([H] marks the hotkey letter), [k]=hotkey, [c]=command
+typeset -A mi_sysinfo=([l]="[S]ystem info" [k]=s [c]="_popup ohm sysinfo")
+typeset -A mi_java=([l]="[J]ava info"      [k]=j [c]="_popup ohm javainfo")
+typeset -A mi_services=([l]="S[e]rvices"   [k]=e [c]="_popup ohm services")
+
+typeset -a topMenu=()
+typeset -a menu=(mi_sysinfo mi_java mi_services)

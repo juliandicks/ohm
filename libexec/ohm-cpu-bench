@@ -1,6 +1,7 @@
 #!/bin/zsh
+# Summary: Run a simple CPU benchmark for cross-machine comparison
 
-[[ -n "$TURBO_PATH" ]] || { print "🛑Script aborted. TURBO_ZSH missing."; exit 250; }
+source "${OHM_PATH:?run this as 'ohm cpu-bench'}/init_env.zsh"
 
 uses crt_lib.zsh
 uses spinner_lib.zsh
@@ -16,7 +17,7 @@ QUIET=0
 
 show_help() {
   cat <<EOF
-Usage: cpu_bench [OPTIONS]
+Usage: ohm cpu-bench [OPTIONS]
 
 Simple CPU benchmark for cross-machine comparison (no install required).
 

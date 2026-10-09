@@ -1,0 +1,51 @@
+#!/bin/zsh
+# Summary: List the registered plugins and what each one provides
+# shellcheck disable=SC2154
+
+source "${OHM_PATH:?run this as 'ohm plugins'}/init_env.zsh"
+
+uses ohm_lib.zsh
+
+show_help() {
+  cat <<HELP
+Usage: ohm plugins
+
+Lists every plugin ohm knows about: directories in \$OHM_PLUGIN_PATH and everything in
+${OHM_USER_PATH#${OHM_PATH}/}/plugins/. A plugin can provide shell setup (plugin.zsh), menu items
+(menu.zsh) and extra commands (libexec/ohm-<name>). Register one from your init file with
+  OhmPlugin ~/path/to/plugin
+or drop (a symlink to) its directory into ${OHM_USER_PATH#${OHM_PATH}/}/plugins/.
+HELP
+}
+
+case "${1:-}" in
+  -h|--help) show_help; exit 0 ;;
+  "") ;;
+  *) print -u2 "ohm plugins: unknown option: $1"; exit 2 ;;
+esac
+
+typeset -i n=0 problems=0
+local d f name note
+local -a parts cmds
+for d in ${(f)"$(OhmPluginDirs)"}; do
+  (( n++ ))
+  parts=() cmds=() note=""
+  [[ -f $d/plugin.zsh ]] && parts+=(plugin.zsh)
+  [[ -f $d/menu.zsh ]] && parts+=(menu.zsh)
+  for f in "$d"/libexec/ohm-*(.xN); do cmds+=("${${f:t}#ohm-}"); done
+  (( ${#cmds} )) && parts+=("commands: ${(j:, :)cmds}")
+  for f in "$d"/plugin.zsh "$d"/menu.zsh "$d"/libexec/ohm-*(N); do
+    [[ -f $f ]] && ! zsh -n "$f" 2>/dev/null && { note+=" [syntax error in ${f#$d/}]"; (( problems++ )); }
+  done
+  for name in "${cmds[@]}"; do
+    [[ -x ${OHM_PATH}/libexec/ohm-${name} ]] && note+=" [ohm ${name} is a core command and wins]"
+  done
+  printf "%-16s %s\n" "${d:t}" "${(j:; :)parts:-(nothing to load)}${note}"
+  printf "%-16s %s\n" "" "${d:a}"
+done
+
+if (( n == 0 )); then
+  print "No plugins registered."
+  print "Add one with OhmPlugin <dir> in your init file, or link it into ${OHM_USER_PATH#${OHM_PATH}/}/plugins/."
+fi
+(( problems == 0 ))

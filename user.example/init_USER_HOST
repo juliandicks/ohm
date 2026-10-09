@@ -1,0 +1,6 @@
+# Sourced by init.zsh for your user on this machine only (after init_<user>).
+# Copied to user/init_<user>_<host> by `ohm config init`; edit freely.
+# shellcheck disable=SC2034
+
+# Machine-specific aliases, exports and PATH changes:
+# export JAVA_HOME=$(/usr/libexec/java_home -v 21)

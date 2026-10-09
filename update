@@ -1,5 +1,0 @@
-#!/bin/zsh
-
-MY_PATH=${0:A:h}
-
-exec "${MY_PATH}/setup" --update "$@"

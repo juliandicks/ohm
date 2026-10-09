@@ -1,0 +1,74 @@
+#!/bin/zsh
+
+source "${0:A:h:h}/init_env.zsh"
+
+uses test_lib.zsh
+
+TestSection "[ohm doctor]"
+
+OHM=${0:A:h:h}
+work=$(mktemp -d) || exit 1
+trap 'rm -rf "$work"' EXIT
+doctor() { OHM_USER_PATH="$tree/user" zsh "$tree/ohm" doctor 2>&1 | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g'; }
+
+# a copy of the public tree, so defects can be introduced safely
+tree="$work/tree"
+mkdir -p "$tree/user"
+cp "$OHM/ohm" "$OHM/init_env.zsh" "$OHM/init.zsh" "$OHM/ohm_lib.zsh" "$OHM/ohm_menu_lib.zsh" "$OHM/version.zsh" "$OHM/ohm_banner" "$OHM/setup" "$OHM/setup.zsh" "$tree/"
+cp -R "$OHM/bin" "$OHM/libexec" "$OHM/user.example" "$tree/"
+ln -s "$OHM/turbo_zsh" "$tree/turbo_zsh"
+ln -s "$OHM/menu_zsh" "$tree/menu_zsh"
+
+# a fresh install has no user/ directory: that must not be reported as a failure
+rmdir "$tree/user"
+out=$(OHM_USER_PATH="$tree/user" zsh "$tree/ohm" doctor 2>&1 | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g')
+AssertTrue test "$(print -r -- "$out" | grep -c '\[FAIL\]')" -eq 0 "a tree with no user/ directory passes (fails: $(print -r -- "$out" | grep '\[FAIL\]' | head -3 | tr '\n' ';'))"
+mkdir -p "$tree/user"
+
+out=$(doctor)
+AssertContains "$out" "turbo_zsh API" "doctor checks the turbo_zsh API contract"
+AssertContains "$out" "commands start in a clean environment" "doctor starts every command in a clean environment"
+AssertContains "$out" "no dangling references" "doctor checks for dangling references"
+AssertTrue test "$(print -r -- "$out" | grep -c '\[FAIL\]')" -eq 0 "a healthy tree passes (fails: $(print -r -- "$out" | grep '\[FAIL\]' | head -3 | tr '\n' ';'))"
+
+# 1. a command still using the old abort-guard (needs ~/.zshenv)
+printf '#!/bin/zsh\n# Summary: broken on purpose\n[[ -n "$TURBO_PATH" ]] || { print "Script aborted."; exit 250; }\nuses crt_lib.zsh\n' > "$tree/libexec/ohm-broken"
+chmod +x "$tree/libexec/ohm-broken"
+AssertContains "$(doctor)" "'ohm broken' does not start in a clean environment" "doctor catches a command that depends on ~/.zshenv"
+rm -f "$tree/libexec/ohm-broken"
+
+# 2. a command that is not executable
+printf '#!/bin/zsh\n# Summary: not executable\n' > "$tree/libexec/ohm-noexec"
+AssertContains "$(doctor)" "libexec/ohm-noexec is not executable" "doctor catches a non-executable command"
+rm -f "$tree/libexec/ohm-noexec"
+
+# 3. a syntax error and a dangling reference
+printf 'if [[ x\n' > "$tree/broken.zsh"
+AssertContains "$(doctor)" "Syntax error in broken.zsh" "doctor catches a syntax error"
+rm -f "$tree/broken.zsh"
+printf '#!/bin/zsh\nsource "${OHM_PATH}/nope.zsh"\nuses ghost_lib.zsh\n' > "$tree/dangling"
+out=$(doctor)
+AssertContains "$out" "dangling: missing nope.zsh" "doctor catches a sourced file that does not exist"
+AssertContains "$out" "uses ghost_lib.zsh" "doctor catches a library that does not exist"
+rm -f "$tree/dangling"
+
+# 4. version contract
+sed -i.bak 's/^export OHM_REQUIRES_TURBO=.*/export OHM_REQUIRES_TURBO=99/' "$tree/version.zsh"
+AssertContains "$(doctor)" "requires 99" "doctor catches a turbo_zsh version mismatch"
+mv "$tree/version.zsh.bak" "$tree/version.zsh"
+
+# 5. renamed machine: files exist only for another host
+: > "$tree/user/init_${USER}_oldhost"
+out=$(doctor)
+AssertContains "$out" "other hosts (oldhost)" "doctor warns when user/ files belong to another host name"
+AssertContains "$out" "ohm config set host" "...and says how to fix it"
+
+# exit status
+OHM_USER_PATH="$tree/user" zsh "$tree/ohm" doctor >/dev/null 2>&1
+AssertStatus "$?" 0 "a tree with only warnings exits 0"
+printf 'if [[ x\n' > "$tree/broken.zsh"
+OHM_USER_PATH="$tree/user" zsh "$tree/ohm" doctor >/dev/null 2>&1
+AssertStatus "$?" 1 "a tree with a failure exits 1"
+
+PrintTestSummary
+exit $?
